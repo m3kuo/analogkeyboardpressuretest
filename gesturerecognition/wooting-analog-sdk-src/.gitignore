@@ -1,0 +1,17 @@
+.vscode/
+.idea/
+analog-plugins/
+
+analog-plugin-c/cmake-build-debug/
+
+*.cbp
+
+target/
+
+analog-plugin-c/win-out/
+
+\.vs/
+
+wooting-test-plugin.link
+
+test-plugins/

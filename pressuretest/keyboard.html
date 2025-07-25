@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Wooting Keyboard Visualizer</title>
+  <style>
+    .keyboard { display: flex; flex-wrap: wrap; width: 780px; }
+    .key {
+      width: 60px; height: 60px; margin: 2px; border: 1px solid #ccc;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; background: #f0f0f0; transition: background 0.1s;
+    }
+    .key.active { background: #4caf50; color: white; }
+  </style>
+</head>
+<body>
+  <h2>Wooting Keyboard Visualizer</h2>
+  <div class="keyboard" id="keyboard"></div>
+  <script>
+    // Simple 104-key US QWERTY layout (keycodes 0-103)
+    const keyLabels = [
+      'ESC','F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12',
+      '`','1','2','3','4','5','6','7','8','9','0','-','=','Backspace',
+      'Tab','Q','W','E','R','T','Y','U','I','O','P','[',']','\\',
+      'Caps','A','S','D','F','G','H','J','K','L',';','\'','Enter',
+      'Shift','Z','X','C','V','B','N','M',',','.','/','Shift',
+      'Ctrl','Win','Alt','Space','Alt','Win','Menu','Ctrl'
+      // ... fill out to 104 as needed
+    ];
+    const keyboard = document.getElementById('keyboard');
+    for (let i = 0; i < 104; i++) {
+      const key = document.createElement('div');
+      key.className = 'key';
+      key.id = 'key' + i;
+      key.textContent = keyLabels[i] || i;
+      keyboard.appendChild(key);
+    }
+
+    // Connect to WebSocket
+    const ws = new WebSocket('ws://localhost:8000');
+    ws.onmessage = (event) => {
+      // Example message: "30:0.512,31:0.234,32:0.900"
+      // Reset all keys
+      for (let i = 0; i < 104; i++) {
+        document.getElementById('key'+i).classList.remove('active');
+      }
+      // Highlight pressed keys
+      event.data.split(',').forEach(pair => {
+        if (pair.trim() === '') return;
+        const [key, val] = pair.split(':');
+        if (parseFloat(val) > 0) {
+          document.getElementById('key'+key).classList.add('active');
+        }
+      });
+    };
+  </script>
+</body>
+</html>

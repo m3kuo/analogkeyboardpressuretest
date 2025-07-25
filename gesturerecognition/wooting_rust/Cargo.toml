@@ -1,0 +1,10 @@
+[package]
+name = "wooting_heatmap"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+eframe = "0.25"
+winapi = { version = "0.3", features = ["windef", "winuser"] }
+wooting-analog-wrapper = { path = "../wooting-analog-sdk-src/wooting-analog-wrapper" }
+chrono = "0.4"

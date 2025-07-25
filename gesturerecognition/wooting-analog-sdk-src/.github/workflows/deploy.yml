@@ -1,0 +1,83 @@
+name: Publish Analog SDK
+
+on:
+  push:
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+
+
+jobs:
+  release:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: win-signing
+            target: x86_64-pc-windows-msvc
+
+    runs-on: ${{ matrix.os }}
+
+    env:
+      TARGET: ${{ matrix.target }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Setup Build Environment
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt update
+          sudo apt install libudev-dev libhidapi-dev
+      - name: Setup rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly-2023-11-10
+          targets: ${{ matrix.target }}
+      - uses: davidB/rust-cargo-make@v1
+        # This doesn't work on custom win runner, so we just skip it as it's installed already anyway
+        if: ${{ ! startsWith(matrix.os, 'win-sign') }}
+        with:
+          version: 0.37.23
+      - uses: Swatinem/rust-cache@v2
+        # Caching not needed on custom runner
+        if: ${{ ! startsWith(matrix.os, 'win-sign') }}
+        with:
+          shared-key: ${{ matrix.target }}
+      - name: Run deploy script
+        shell: bash
+        # Signing key env is required for signing dll's on windows
+        env:
+          TIMESTAMP: ${{secrets.WIN_EV_CSC_TIMESTAMP}}
+          CERT_FILE: ${{secrets.WIN_EV_CSC_CERT_FILE}}
+          CRYPT_PROVIDER: ${{secrets.WIN_EV_CSC_CRYPT_PROVIDER}}
+          READER: ${{secrets.WIN_EV_CSC_READER}}
+          PASS: ${{secrets.WIN_EV_CSC_PASS}}
+          CONTAINER: ${{secrets.WIN_EV_CSC_CONTAINER}}
+        run: sh ci/before_deploy.sh
+      - name: Build Windows Installer
+        shell: bash
+        if: runner.os == 'Windows'
+        env:
+          TIMESTAMP: ${{secrets.WIN_EV_CSC_TIMESTAMP}}
+          CERT_FILE: ${{secrets.WIN_EV_CSC_CERT_FILE}}
+          CRYPT_PROVIDER: ${{secrets.WIN_EV_CSC_CRYPT_PROVIDER}}
+          READER: ${{secrets.WIN_EV_CSC_READER}}
+          PASS: ${{secrets.WIN_EV_CSC_PASS}}
+          CONTAINER: ${{secrets.WIN_EV_CSC_CONTAINER}}
+        run: cargo make --cwd wooting-analog-sdk sign-win-installer -- --target $TARGET
+      - name: Build debian package
+        if: startsWith(matrix.os, 'ubuntu')
+        run: cargo make --cwd wooting-analog-sdk build-deb  -- --target $TARGET
+      - name: Upload artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: |
+            target/wix/*.msi
+            target/debian/*.deb
+            *.tar.gz
