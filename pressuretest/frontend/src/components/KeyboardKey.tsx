@@ -39,7 +39,7 @@ export const KeyboardKey = ({
   return (
     <div
       className={cn(
-        'relative w-16 h-16 rounded-lg flex flex-col items-center justify-center',
+        'relative w-20 h-20 rounded-lg flex flex-col items-center justify-center',
         'transition-all duration-150 font-mono font-bold text-lg',
         'border-2 shadow-lg',
         {
@@ -56,15 +56,15 @@ export const KeyboardKey = ({
           : 'var(--shadow-key)'
       }}
     >
-      <span className="text-2xl text-white uppercase">{keyChar}</span>
+      <span className="text-5xl text-white uppercase">{keyChar}</span>
 
       {isTarget && (
         <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2">
-          <div className="text-xs text-center">
-            <div className="text-primary font-bold">{targetPressure}%</div>
+          <div className="text-s text-center">
+            <div className="text-primary text-2xl font-bold">{targetPressure}%</div>
             {isPressed && (
               <div
-                className="text-xs font-medium"
+                className="text-xl font-medium"
                 style={{ color: getPressureColor(currentPressure) }}
               >
                 {Math.round(currentPressure * 100)}%

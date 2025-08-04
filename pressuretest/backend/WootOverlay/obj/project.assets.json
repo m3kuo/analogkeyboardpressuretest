@@ -355,11 +355,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\Mitchell\\wooting-analog-rhythm-test\\backend\\WootOverlay\\WootOverlay.csproj",
+      "projectUniqueName": "C:\\Users\\Mitchell\\wooting-combined\\pressuretest\\backend\\WootOverlay\\WootOverlay.csproj",
       "projectName": "WootOverlay",
-      "projectPath": "C:\\Users\\Mitchell\\wooting-analog-rhythm-test\\backend\\WootOverlay\\WootOverlay.csproj",
+      "projectPath": "C:\\Users\\Mitchell\\wooting-combined\\pressuretest\\backend\\WootOverlay\\WootOverlay.csproj",
       "packagesPath": "C:\\Users\\Mitchell\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\Mitchell\\wooting-analog-rhythm-test\\backend\\WootOverlay\\obj\\",
+      "outputPath": "C:\\Users\\Mitchell\\wooting-combined\\pressuretest\\backend\\WootOverlay\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\Mitchell\\AppData\\Roaming\\NuGet\\NuGet.Config"

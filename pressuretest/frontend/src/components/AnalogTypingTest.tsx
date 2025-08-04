@@ -270,11 +270,11 @@ export const AnalogTypingTest = () => {
                 Reset
               </Button>
             </div>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-m text-muted-foreground">
               Progress: {currentIndex} / {testSequence.length}
             </div>
           </div>
-          <Progress value={(currentIndex / testSequence.length) * 100} className="h-2" />
+          
         </Card>
 
         {isTestActive && (
@@ -283,7 +283,7 @@ export const AnalogTypingTest = () => {
               <div className="text-lg text-muted-foreground">Get ready for the next key...</div>
             ) : (
               <div>
-                <div className="text-lg text-muted-foreground mb-2">Press and hold this key:</div>
+                <div className="text-xl text-muted-foreground mb-2">Press and hold this key at the given analog Value:</div>
                 <div className="flex justify-center">
                   <KeyboardKey
                     keyChar={testSequence[currentIndex]?.key}
@@ -291,7 +291,7 @@ export const AnalogTypingTest = () => {
                     currentPressure={getCurrentKeyPress(testSequence[currentIndex]?.keyCode)?.analogValue || 0}
                     isPressed={getCurrentKeyPress(testSequence[currentIndex]?.keyCode)?.isPressed === 1}
                     isTarget={true}
-                    className="w-20 h-20 text-3xl"
+                    className="w-20 h-20 text-10xl"
                   />
                 </div>
               </div>
@@ -299,18 +299,8 @@ export const AnalogTypingTest = () => {
           </Card>
         )}
 
-        <Card className="p-4 mt-4">
-          <h3 className="text-lg font-medium mb-2">Real-time Key Data</h3>
-          {keyData.length === 0 ? (
-            <div className="text-muted-foreground text-sm">No keys currently pressed</div>
-          ) : (
-            keyData.map(k => (
-              <div key={k.keyCode} className="text-sm">
-                Key {k.keyCode}: {Math.round(k.analogValue * 100)}%
-              </div>
-            ))
-          )}
-        </Card>
+        
+         
       </div>
     </div>
   );
