@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { KeyboardKey } from './KeyboardKey';
 import { useWebSocket, KeyData } from '@/hooks/useWebSocket';
-import { Play, Pause, RotateCcw, Wifi, WifiOff } from 'lucide-react';
+import { Play, Pause, RotateCcw, Wifi, WifiOff, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface TestSequence {
@@ -18,6 +18,15 @@ interface TestStats {
   totalAttempts: number;
   successfulHits: number;
   averageDeviation: number;
+}
+
+interface AttemptRecord {
+  key: string;
+  targetPressure: number;
+  actualPressure: number;
+  deviation: number;
+  success: boolean;
+  timestamp: number;
 }
 
 const HOME_ROW_KEYS = [
@@ -40,13 +49,13 @@ export const AnalogTypingTest = () => {
   const { toast } = useToast();
 
   const [levelCount, setLevelCount] = useState<number>(3);
-
   const [testSequence, setTestSequence] = useState<TestSequence[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isTestActive, setIsTestActive] = useState(false);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
   const [maxAnalog, setMaxAnalog] = useState<number>(0);
   const [keyHeld, setKeyHeld] = useState<boolean>(false);
+  const [attemptHistory, setAttemptHistory] = useState<AttemptRecord[]>([]);
 
   const [testStats, setTestStats] = useState<TestStats>({
     accuracy: 0,
@@ -69,11 +78,89 @@ export const AnalogTypingTest = () => {
     }
     setTestSequence(sequence);
     setCurrentIndex(0);
+    setAttemptHistory([]);
   }, [levelCount]);
 
   useEffect(() => {
     generateTestSequence();
   }, [generateTestSequence]);
+
+  const exportToCSV = () => {
+    if (attemptHistory.length === 0) {
+      toast({
+        title: 'No data to export',
+        description: 'Complete the test first to generate results',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    const headers = "Key,Target Pressure (%),Actual Pressure (%),Deviation (%),Success,Timestamp\n";
+    const csvRows = attemptHistory.map(attempt => 
+      `${attempt.key},${attempt.targetPressure},${attempt.actualPressure},` +
+      `${attempt.deviation},${attempt.success ? "Yes" : "No"},` +
+      `${new Date(attempt.timestamp).toLocaleString()}`
+    ).join("\n");
+
+    const summary = [
+      "\nSummary",
+      `Accuracy,${Math.round(testStats.accuracy)}%`,
+      `Total Attempts,${testStats.totalAttempts}`,
+      `Successful Hits,${testStats.successfulHits}`,
+      `Average Deviation,${Math.round(testStats.averageDeviation)}%`
+    ].join("\n");
+
+    const csvContent = headers + csvRows + summary;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `typing-test-${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleAttempt = (deviation: number, isSuccess: boolean, message: string) => {
+    const currentTarget = testSequence[currentIndex];
+    const actualPressure = maxAnalog * 100;
+    
+    const newAttempt: AttemptRecord = {
+      key: currentTarget.key,
+      targetPressure: currentTarget.targetPressure,
+      actualPressure: Math.round(actualPressure),
+      deviation: Math.round(deviation),
+      success: isSuccess,
+      timestamp: Date.now()
+    };
+
+    setAttemptHistory(prev => [...prev, newAttempt]);
+
+    setTestStats(prev => {
+      const newTotal = prev.totalAttempts + 1;
+      const newHits = prev.successfulHits + (isSuccess ? 1 : 0);
+      const accuracy = (newHits / newTotal) * 100;
+      const avgDev = (prev.averageDeviation * prev.totalAttempts + deviation) / newTotal;
+      return {
+        accuracy,
+        totalAttempts: newTotal,
+        successfulHits: newHits,
+        averageDeviation: avgDev
+      };
+    });
+
+    toast({
+      title: message,
+      description: isSuccess ? 'Held correct pressure' : `Deviation: ${Math.round(deviation)}%`,
+      variant: isSuccess ? undefined : 'destructive'
+    });
+
+    setCooldownUntil(Date.now() + 1500);
+    setTimeout(() => {
+      setCurrentIndex(prev => prev + 1);
+      setCooldownUntil(null);
+    }, 3000);
+  };
 
   useEffect(() => {
     if (!isTestActive || currentIndex >= testSequence.length) return;
@@ -100,33 +187,6 @@ export const AnalogTypingTest = () => {
       setMaxAnalog(0);
     }
   }, [keyData, isTestActive, currentIndex, testSequence, cooldownUntil, maxAnalog, keyHeld]);
-
-  const handleAttempt = (deviation: number, isSuccess: boolean, message: string) => {
-    setTestStats(prev => {
-      const newTotal = prev.totalAttempts + 1;
-      const newHits = prev.successfulHits + (isSuccess ? 1 : 0);
-      const accuracy = (newHits / newTotal) * 100;
-      const avgDev = (prev.averageDeviation * prev.totalAttempts + deviation) / newTotal;
-      return {
-        accuracy,
-        totalAttempts: newTotal,
-        successfulHits: newHits,
-        averageDeviation: avgDev
-      };
-    });
-
-    toast({
-      title: message,
-      description: isSuccess ? 'Held correct pressure' : `Deviation: ${Math.round(deviation)}%`,
-      variant: isSuccess ? undefined : 'destructive'
-    });
-
-    setCooldownUntil(Date.now() + 3000);
-    setTimeout(() => {
-      setCurrentIndex(prev => prev + 1);
-      setCooldownUntil(null);
-    }, 3000);
-  };
 
   useEffect(() => {
     if (currentIndex >= testSequence.length && isTestActive) {
@@ -269,12 +329,20 @@ export const AnalogTypingTest = () => {
                 <RotateCcw className="w-4 h-4" />
                 Reset
               </Button>
+              <Button 
+                onClick={exportToCSV} 
+                variant="outline" 
+                className="flex items-center gap-2"
+                disabled={attemptHistory.length === 0}
+              >
+                <Download className="w-4 h-4" />
+                Export CSV
+              </Button>
             </div>
             <div className="text-m text-muted-foreground">
               Progress: {currentIndex} / {testSequence.length}
             </div>
           </div>
-          
         </Card>
 
         {isTestActive && (
@@ -298,9 +366,6 @@ export const AnalogTypingTest = () => {
             )}
           </Card>
         )}
-
-        
-         
       </div>
     </div>
   );
