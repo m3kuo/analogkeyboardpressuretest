@@ -1,5 +1,54 @@
-This is a professional, clean README.md formatted specifically for a GitHub repository. It uses clear hierarchy, badges, and code blocks to make it easy for others to fork and run.⌨️ Pressure Type (MonkeyType Edition)An analog-sensitive typing application that challenges players to control their finger pressure. Built for keyboards with analog sensors (Wooting, Razer, SteelSeries), this app evaluates not just what you type, but how hard you press.🚀 Quick Start1. PrerequisitesAnalog Hardware: A keyboard supporting per-key analog input.Node.js: v18.0 or higher.Backend Driver: A WebSocket server (C# or Python) to stream HID reports to the web.2. InstallationClone the repository:Bashgit clone https://github.com/your-username/pressure-type.git
-cd pressure-type
-Install Frontend Dependencies:Bashnpm install
-🛠 Running the ApplicationStep 1: Start the BackendThe Backend acts as the bridge between your HID hardware and the browser via WebSockets.Navigate to your backend directory.Run the server:Windows Executable: .\AnalogServer.exePython Script: python server.pyConfirm the server is listening on ws://localhost:8080.Step 2: Launch the FrontendIn the project root, run:Bashnpm run dev
-Open http://localhost:5173 in your browser.Click "Connect Keyboard" in the UI header to establish the link.🎮 Gameplay MechanicsDynamic Targets: Each word is assigned a pressure goal: Light, Medium, or Full.Visual Feedback: * <span style="color: #22c55e">Green Letters:</span> Correct key + Correct pressure.<span style="color: #ef4444">Red Letters:</span> Correct key + Wrong pressure.Persistent Text: Words stay on screen like MonkeyType, with a real-time cursor tracking your progress.Data Export: Download a .csv after your test to analyze deviation and consistency.🔧 TroubleshootingIssuePotential SolutionStatus: DisconnectedVerify the backend is running and that port 8080 isn't blocked by a firewall.No Pressure MovementEnsure your keyboard is in Analog Mode (Wooting Tachyon mode or similar).Input LagEnsure you are using a high-polling rate backend (1000Hz recommended).Wrong Keys LoggedCheck the keyCodeMap in MonkeyTypePressure.tsx to match your specific hardware's scan codes.
+# ⌨️ Pressure Type 
+
+**Pressure Type** is an analog-sensitive typing application designed to challenge and evaluate physical keystroke precision. Developed for keyboards with analog Hall-Effect sensors and specificallu for Wooting Keyboards, it gamifies the typing experience by requiring specific pressure depths for every character and for commonly used words.
+
+## What is Pressure Type
+
+A utility and interactive web application that measures per-key analog depth. Unlike standard typing tests, this application evaluates "How Hard" you press based on dynamic targets, providing real-time feedback and detailed analytical exports.
+### Prerequisites
+
+* **Analog Hardware:** A keyboard supporting per-key analog input (e.g., Wooting, SteelSeries, Razer).
+* **Node.js:** v18.0 or higher.
+* **Backend Driver:** A WebSocket server to stream HID reports to the browser.
+## Installation
+1. Navigate to the frondend folder and start by npm install then npm run dev
+2. Seperate Terminal Window navigate to the backend and dotnet run
+3. Select Wooting Keyboard
+
+
+## Usage 
+Click Connect Keyboard in the application header.
+The connection status indicator will turn green once the handshake is complete.
+
+**Running a Test**
+To start a pressure-sensitive session:
+1.Select your word count (5 or 15 words).
+2.Click Start Session.
+3.Follow the target pressure prompts:
+Light: 10–40% depth
+Medium: 41–80% depth
+Full: 95%+ depth
+
+## Results & Export
+After the test concludes, the results dashboard provides:
+
+WPM: Speed adjusted for pressure accuracy.
+
+Accuracy: Percentage of keys hit within the target pressure range.
+
+Average Force: Mean pressure depth across the session.
+
+## Troubleshooting
+Status: Disconnected
+Ensure your Backend server is running and the port 8080 is not occupied or blocked by a firewall.
+
+No Pressure Movement
+Ensure your keyboard is in Analog Mode (e.g., Wooting Tachyon mode). Standard digital mode will only report 0% or 100%.
+
+Wrong Keys Logged
+Check the keyCodeMap in the source code. Different hardware manufacturers may use varying scan codes for specific HID reports.
+
+   
+
+
+
