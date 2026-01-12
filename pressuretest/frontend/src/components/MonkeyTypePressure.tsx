@@ -1,521 +1,265 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { KeyboardKey } from './KeyboardKey';
-import { useWebSocket, KeyData } from '@/hooks/useWebSocket';
-import { Play, Pause, RotateCcw, Wifi, WifiOff, Download } from 'lucide-react';
+import { useWebSocket } from '@/hooks/useWebSocket';
+import { Play, RotateCcw, Wifi, WifiOff, ChevronRight, Keyboard, AlertCircle, CheckCircle2, Trophy, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useNavigate, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 interface MonkeyTypeSequence {
   key: string;
   keyCode: number;
-  targetPressure: number; // 25, 60, 50, or 100
-}
-
-interface MonkeyTypeStats {
-  accuracy: number;
-  totalAttempts: number;
-  successfulHits: number;
-  averageDeviation: number;
-  wpm: number;
-  timeElapsed: number;
-}
-
-interface MonkeyTypeAttempt {
-  key: string;
   targetPressure: number;
-  actualPressure: number;
-  deviation: number;
-  success: boolean;
-  timestamp: number;
+  wordIndex: number;
 }
 
-const COMMON_WORDS = [
-  'the', 'quick', 'brown', 'fox', 'jumps', 'over', 'lazy', 'dog',
-  'able', 'about', 'above', 'after', 'again', 'against', 'all', 'am',
-  'and', 'any', 'are', 'area', 'areas', 'around', 'as', 'ask', 'asked',
-  'aside', 'ask', 'at', 'ate', 'away', 'awesome', 'back', 'bad', 'bag',
-  'ball', 'band', 'bank', 'bar', 'bare', 'bark', 'base', 'basic', 'basket',
-  'bass', 'bath', 'be', 'beach', 'bean', 'bear', 'beat', 'been', 'beer',
-  'before', 'began', 'begin', 'being', 'bell', 'below', 'belt', 'bend',
-  'best', 'better', 'between', 'beyond', 'big', 'bike', 'bill', 'bind',
-  'bird', 'birth', 'bit', 'bite', 'black', 'blade', 'blame', 'blank',
-  'blast', 'blood', 'blow', 'blue', 'board', 'body', 'boil', 'bold',
-  'bolt', 'bomb', 'bond', 'bone', 'book', 'boom', 'boot', 'bore', 'born',
-];
-
-// Pressure level ranges
-const LIGHT_MIN = 10;
-const LIGHT_MAX = 40;
-const MED_MIN = 41;
-const MED_MAX = 80;
-const MID_MIN = 10;
-const MID_MAX = 90;
+const COMMON_WORDS = ['the', 'quick', 'brown', 'fox', 'jumps', 'over', 'lazy', 'dog', 'able', 'about', 'above', 'again', 'area', 'best', 'better', 'bird', 'black', 'blue', 'body', 'book', 'built', 'busy', 'call'];
+const PRESSURE_TARGETS = [25, 60, 100]; 
+const LIGHT_MIN = 10; const LIGHT_MAX = 40;
+const MED_MIN = 41;  const MED_MAX = 80;
 const FULL_MIN = 95;
 
 const getTargetLabel = (t: number) => {
   if (t === 25) return "Light (10–40%)";
   if (t === 60) return "Medium (41–80%)";
-  if (t === 50) return "Mid (10–90%)";
-  if (t === 100) return "100% (full press)";
-  return "";
-};
-
-const targetToText = (t: number) => {
-  if (t === 25) return "Light";
-  if (t === 60) return "Medium";
-  if (t === 50) return "Mid";
-  if (t === 100) return "Full";
-  return String(t);
-};
-
-const isSuccessForRange = (target: number, percent: number) => {
-  if (target === 25) return percent >= LIGHT_MIN && percent <= LIGHT_MAX;
-  if (target === 60) return percent >= MED_MIN && percent <= MED_MAX;
-  if (target === 50) return percent >= MID_MIN && percent <= MID_MAX;
-  if (target === 100) return percent >= FULL_MIN;
-  return false;
-};
-
-const computeDeviationForRange = (target: number, percent: number) => {
-  if (target === 25) {
-    if (percent < LIGHT_MIN) return LIGHT_MIN - percent;
-    if (percent > LIGHT_MAX) return percent - LIGHT_MAX;
-    return 0;
-  }
-  if (target === 60) {
-    if (percent < MED_MIN) return MED_MIN - percent;
-    if (percent > MED_MAX) return percent - MED_MAX;
-    return 0;
-  }
-  if (target === 50) {
-    if (percent < MID_MIN) return MID_MIN - percent;
-    if (percent > MID_MAX) return percent - MID_MAX;
-    return 0;
-  }
-  if (target === 100) {
-    return Math.max(0, 100 - percent);
-  }
-  return 100;
-};
-
-// Get keys used in a word
-const getKeysForWord = (word: string): MonkeyTypeSequence[] => {
-  const keyCodeMap: Record<string, number> = {
-    'a': 4, 'b': 5, 'c': 6, 'd': 7, 'e': 8, 'f': 9, 'g': 10, 'h': 11, 'i': 12,
-    'j': 13, 'k': 14, 'l': 15, 'm': 16, 'n': 17, 'o': 18, 'p': 19, 'q': 20,
-    'r': 21, 's': 22, 't': 23, 'u': 24, 'v': 25, 'w': 26, 'x': 27, 'y': 28, 'z': 29,
-  };
-
-  return word.toLowerCase().split('').map(char => ({
-    key: char,
-    keyCode: keyCodeMap[char] || 0,
-    targetPressure: [25, 60, 50, 100][Math.floor(Math.random() * 4)]
-  }));
+  if (t === 100) return "100% (Full)";
+  return "Mid (10-90%)";
 };
 
 export const MonkeyTypePressure = () => {
   const { keyData, connectionStatus, connect, disconnect } = useWebSocket();
   const { toast } = useToast();
-  const navigate = useNavigate();
-
   const location = useLocation();
-  const playerName = (location.state as { name?: string } | undefined)?.name || "anonymous";
 
+  const playerName = (location.state as { name?: string } | undefined)?.name || "anonymous";
+  const [wordCountGoal, setWordCountGoal] = useState<5 | 15>(5);
   const [testSequence, setTestSequence] = useState<MonkeyTypeSequence[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isTestActive, setIsTestActive] = useState(false);
-  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
+  const [testComplete, setTestComplete] = useState(false);
   const [testStartTime, setTestStartTime] = useState<number | null>(null);
-
   const [maxAnalog, setMaxAnalog] = useState<number>(0);
   const [keyHeld, setKeyHeld] = useState<boolean>(false);
+  
+  const [lastFeedback, setLastFeedback] = useState<{ text: string, type: 'success' | 'error' } | null>(null);
+  const [letterResults, setLetterResults] = useState<{ success: boolean, pressure: number }[]>([]);
+  const [finalStats, setFinalStats] = useState({ wpm: 0, accuracy: 0, avgPressure: 0 });
 
-  const [attemptHistory, setAttemptHistory] = useState<MonkeyTypeAttempt[]>([]);
-  const [testStats, setTestStats] = useState<MonkeyTypeStats>({
-    accuracy: 0,
-    totalAttempts: 0,
-    successfulHits: 0,
-    averageDeviation: 0,
-    wpm: 0,
-    timeElapsed: 0
-  });
-
-  // Generate sequence from words
+  // Handle word sequence generation
   const generateTestSequence = useCallback(() => {
     const sequence: MonkeyTypeSequence[] = [];
-    const numWords = 10; // 10 words for quick test
-    for (let i = 0; i < numWords; i++) {
+    const keyCodeMap: Record<string, number> = {
+      'a':4,'b':5,'c':6,'d':7,'e':8,'f':9,'g':10,'h':11,'i':12,'j':13,'k':14,'l':15,
+      'm':16,'n':17,'o':18,'p':19,'q':20,'r':21,'s':22,'t':23,'u':24,'v':25,'w':26,
+      'x':27,'y':28,'z':29,' ':44
+    };
+
+    for (let i = 0; i < wordCountGoal; i++) {
       const word = COMMON_WORDS[Math.floor(Math.random() * COMMON_WORDS.length)];
-      const keySequence = getKeysForWord(word);
-      sequence.push(...keySequence);
-      // Add space between words
-      if (i < numWords - 1) {
-        sequence.push({
-          key: ' ',
-          keyCode: 44, // Space key
-          targetPressure: [25, 60, 50, 100][Math.floor(Math.random() * 4)]
-        });
+      const targetPressure = PRESSURE_TARGETS[Math.floor(Math.random() * PRESSURE_TARGETS.length)];
+      word.split('').forEach(char => {
+        sequence.push({ key: char, keyCode: keyCodeMap[char] || 0, targetPressure, wordIndex: i });
+      });
+      if (i < wordCountGoal - 1) {
+        sequence.push({ key: ' ', keyCode: 44, targetPressure, wordIndex: i });
       }
     }
     setTestSequence(sequence);
     setCurrentIndex(0);
-    setAttemptHistory([]);
-    setTestStats({
-      accuracy: 0,
-      totalAttempts: 0,
-      successfulHits: 0,
-      averageDeviation: 0,
-      wpm: 0,
-      timeElapsed: 0
-    });
-  }, []);
+    setLetterResults([]);
+    setTestComplete(false);
+    setIsTestActive(false);
+  }, [wordCountGoal]);
 
-  useEffect(() => {
-    generateTestSequence();
-  }, [generateTestSequence]);
+  useEffect(() => { generateTestSequence(); }, [generateTestSequence]);
 
-  // Update WPM and time elapsed
-  useEffect(() => {
-    if (!isTestActive || !testStartTime) return;
-
-    const interval = setInterval(() => {
-      const elapsed = (Date.now() - testStartTime) / 1000 / 60; // minutes
-      const words = testStats.successfulHits;
-      const wpm = elapsed > 0 ? Math.round(words / elapsed) : 0;
-
-      setTestStats(prev => ({
-        ...prev,
-        wpm,
-        timeElapsed: Math.round((Date.now() - testStartTime) / 1000)
-      }));
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isTestActive, testStartTime, testStats.successfulHits]);
-
-  const exportToCSV = () => {
-    if (attemptHistory.length === 0) {
-      toast({
-        title: 'No data to export',
-        description: 'Complete the test first to generate results',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    const headers = "Key,Target,Actual Pressure (%),Deviation (%),Success,Timestamp\n";
-    const rows = attemptHistory.map(a =>
-      `${a.key === ' ' ? 'SPACE' : a.key},${targetToText(a.targetPressure)},${a.actualPressure},${a.deviation},${a.success ? "Yes" : "No"},${new Date(a.timestamp).toLocaleString()}`
-    ).join("\n");
-
-    const summary = [
-      "\nSummary",
-      `Player,${playerName}`,
-      `Accuracy,${Math.round(testStats.accuracy)}%`,
-      `WPM,${testStats.wpm}`,
-      `Time Elapsed,${testStats.timeElapsed}s`,
-      `Total Attempts,${testStats.totalAttempts}`,
-      `Successful Hits,${testStats.successfulHits}`,
-      `Average Deviation,${Math.round(testStats.averageDeviation)}%`,
-    ].join("\n");
-
-    const csvContent = headers + rows + summary;
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-
-    const safeName = playerName.replace(/[^a-z0-9]/gi, "_");
-    link.setAttribute('href', url);
-    link.setAttribute('download', `monkeytype-pressure-${safeName}-${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleAttempt = (overrideTitle: string | null = null) => {
-    const currentTarget = testSequence[currentIndex];
-    const percent = Math.max(0, Math.min(100, maxAnalog * 100));
-
-    const success = isSuccessForRange(currentTarget.targetPressure, percent);
-    const deviation = computeDeviationForRange(currentTarget.targetPressure, percent);
-
-    let title = overrideTitle ?? (success ? "Good!" : "Missed target");
-    if (!overrideTitle && !success) {
-      if (currentTarget.targetPressure === 100) title = "Not fully pressed";
-      else title = percent < (currentTarget.targetPressure === 25 ? LIGHT_MIN : currentTarget.targetPressure === 60 ? MED_MIN : MID_MIN)
-        ? "Too light"
-        : "Too heavy";
-    }
-
-    const newAttempt: MonkeyTypeAttempt = {
-      key: currentTarget.key,
-      targetPressure: currentTarget.targetPressure,
-      actualPressure: Math.round(percent),
-      deviation: Math.round(deviation),
-      success,
-      timestamp: Date.now()
-    };
-
-    setAttemptHistory(prev => [...prev, newAttempt]);
-
-    setTestStats(prev => {
-      const newTotal = prev.totalAttempts + 1;
-      const newHits = prev.successfulHits + (success ? 1 : 0);
-      const accuracy = (newHits / newTotal) * 100;
-      const avgDev = (prev.averageDeviation * prev.totalAttempts + deviation) / newTotal;
-      const elapsed = testStartTime ? (Date.now() - testStartTime) / 1000 / 60 : 0;
-      const wpm = elapsed > 0 ? Math.round(newHits / elapsed) : 0;
-
-      return {
-        accuracy,
-        totalAttempts: newTotal,
-        successfulHits: newHits,
-        averageDeviation: avgDev,
-        wpm,
-        timeElapsed: testStartTime ? Math.round((Date.now() - testStartTime) / 1000) : 0
-      };
-    });
-
-    setCooldownUntil(Date.now() + 300); // Shorter cooldown for MonkeyType feel
-    setTimeout(() => {
-      setCurrentIndex(prev => prev + 1);
-      setCooldownUntil(null);
-    }, 300);
-  };
-
-  useEffect(() => {
-    if (!isTestActive || currentIndex >= testSequence.length) return;
-    if (cooldownUntil && Date.now() < cooldownUntil) return;
-
-    const currentTarget = testSequence[currentIndex];
-    const keyEvent = keyData.find(k => k.keyCode === currentTarget.keyCode);
-    const otherPressed = keyData.find(k => k.keyCode !== currentTarget.keyCode && k.isPressed);
-
-    if (otherPressed) {
-      const prev = maxAnalog;
-      setMaxAnalog(0);
-      handleAttempt('Wrong key!');
-      setMaxAnalog(prev);
-      return;
-    }
-
-    if (keyEvent?.isPressed) {
-      setKeyHeld(true);
-      setMaxAnalog(prev => Math.max(prev, keyEvent.analogValue));
-    } else if (keyHeld) {
-      handleAttempt();
-      setKeyHeld(false);
-      setMaxAnalog(0);
-    }
-  }, [keyData, isTestActive, currentIndex, testSequence, cooldownUntil, keyHeld, maxAnalog, toast]);
-
-  useEffect(() => {
-    if (currentIndex >= testSequence.length && isTestActive) {
-      setIsTestActive(false);
-      toast({
-        title: 'Test Complete!',
-        description: `Final WPM: ${testStats.wpm} | Accuracy: ${Math.round(testStats.accuracy)}%`,
-      });
-    }
-  }, [currentIndex, testSequence.length, isTestActive, testStats.accuracy, testStats.wpm, toast]);
-
-  const startTest = () => {
+  const handleStart = () => {
     if (connectionStatus !== 'connected') {
       connect();
-      toast({ title: 'Connecting...', description: 'Please wait while we connect to your Wooting keyboard' });
+      toast({ title: "Connecting...", description: "Please ensure your keyboard backend is active." });
       return;
     }
     setIsTestActive(true);
     setTestStartTime(Date.now());
   };
 
-  const pauseTest = () => setIsTestActive(false);
-
-  const resetTest = () => {
-    setIsTestActive(false);
-    setCurrentIndex(0);
-    setTestStats({
-      accuracy: 0,
-      totalAttempts: 0,
-      successfulHits: 0,
-      averageDeviation: 0,
-      wpm: 0,
-      timeElapsed: 0
-    });
-    setCooldownUntil(null);
-    setMaxAnalog(0);
-    setKeyHeld(false);
-    setTestStartTime(null);
-    generateTestSequence();
+  const exportToCSV = () => {
+    const headers = "Key,Target,Actual,Success\n";
+    const rows = letterResults.map((r, i) => 
+      `${testSequence[i].key === ' ' ? 'SPACE' : testSequence[i].key},${testSequence[i].targetPressure},${r.pressure},${r.success}`
+    ).join("\n");
+    const blob = new Blob([headers + rows], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pressure_results_${playerName}.csv`;
+    a.click();
   };
 
-  const getCurrentKeyPress = (keyCode: number): KeyData | undefined => {
-    return keyData.find(k => k.keyCode === keyCode);
-  };
+  const handleAttempt = () => {
+    const current = testSequence[currentIndex];
+    const percent = Math.round(maxAnalog * 100);
+    const t = current.targetPressure;
+    
+    let success = false;
+    let feedbackText = "";
 
-  const getConnectionIcon = () => {
-    switch (connectionStatus) {
-      case 'connected': return <Wifi className="w-4 h-4 text-success" />;
-      case 'connecting': return <Wifi className="w-4 h-4 text-warning animate-pulse" />;
-      default: return <WifiOff className="w-4 h-4 text-destructive" />;
+    if (t === 25) {
+        success = percent >= LIGHT_MIN && percent <= LIGHT_MAX;
+        feedbackText = success ? "Perfect Light" : percent < LIGHT_MIN ? "Too Light" : "Too Heavy";
+    } else if (t === 60) {
+        success = percent >= MED_MIN && percent <= MED_MAX;
+        feedbackText = success ? "Great Mid" : percent < MED_MIN ? "Too Light" : "Too Heavy";
+    } else if (t === 100) {
+        success = percent >= FULL_MIN;
+        feedbackText = success ? "Solid Press" : "Needs more force";
     }
+
+    setLastFeedback({ text: `${feedbackText} (${percent}%)`, type: success ? 'success' : 'error' });
+    const newResults = [...letterResults, { success, pressure: percent }];
+    setLetterResults(newResults);
+
+    if (currentIndex === testSequence.length - 1) {
+        const duration = (Date.now() - (testStartTime || 0)) / 60000;
+        const correct = newResults.filter(r => r.success).length;
+        setFinalStats({
+            wpm: Math.round((correct / 5) / duration),
+            accuracy: (correct / testSequence.length) * 100,
+            avgPressure: Math.round(newResults.reduce((acc, r) => acc + r.pressure, 0) / newResults.length)
+        });
+        setTestComplete(true);
+        setIsTestActive(false);
+    }
+    setCurrentIndex(prev => prev + 1);
   };
 
-  // Get words being typed
-  const getTypedWords = () => {
-    let words: string[] = [];
-    let currentWord = '';
-    for (let i = 0; i < currentIndex; i++) {
-      if (testSequence[i].key === ' ') {
-        if (currentWord) words.push(currentWord);
-        currentWord = '';
-      } else {
-        currentWord += testSequence[i].key;
-      }
+  useEffect(() => {
+    if (!isTestActive || currentIndex >= testSequence.length) return;
+    const current = testSequence[currentIndex];
+    const keyEv = keyData.find(k => k.keyCode === current.keyCode);
+    if (keyEv?.isPressed) {
+      setKeyHeld(true);
+      setMaxAnalog(prev => Math.max(prev, keyEv.analogValue));
+    } else if (keyHeld) {
+      handleAttempt();
+      setKeyHeld(false);
+      setMaxAnalog(0);
     }
-    return words;
-  };
+  }, [keyData, isTestActive, currentIndex, keyHeld, maxAnalog]);
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-            MonkeyType Pressure Edition
-          </h1>
-          <p className="text-muted-foreground">
-            Type words while maintaining precise pressure levels on each keystroke
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Player: <span className="font-medium">{playerName}</span>
-          </p>
-        </div>
-
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {getConnectionIcon()}
-              <span className="font-medium">
-                Status: {connectionStatus.charAt(0).toUpperCase() + connectionStatus.slice(1)}
-              </span>
+    <div className="min-h-screen bg-background p-6 font-mono text-foreground">
+      <div className="max-w-4xl mx-auto space-y-6">
+        
+        {/* Connection Bar (RESTORED) */}
+        <div className="flex items-center justify-between bg-muted/30 p-4 rounded-xl border border-border">
+          <div className="flex items-center gap-4">
+            <div className={`p-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500 animate-pulse'}`}>
+              {connectionStatus === 'connected' ? <Wifi size={20} /> : <WifiOff size={20} />}
             </div>
-            <div className="flex gap-2">
-              {connectionStatus !== 'connected' && (
-                <Button variant="outline" size="sm" onClick={connect}>
-                  Connect
-                </Button>
-              )}
-              {connectionStatus === 'connected' && (
-                <Button variant="outline" size="sm" onClick={disconnect}>
-                  Disconnect
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={() => navigate('/')}>
-                Back to Menu
-              </Button>
+            <div>
+              <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest leading-none">Status</p>
+              <p className="font-bold text-sm leading-tight">{connectionStatus === 'connected' ? 'Keyboard Linked' : 'Disconnected'}</p>
             </div>
           </div>
-        </Card>
-
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <Card className="p-4 text-center">
-            <div className="text-2xl font-bold text-primary">
-              {testStats.wpm}
-            </div>
-            <div className="text-sm text-muted-foreground">WPM</div>
-          </Card>
-          <Card className="p-4 text-center">
-            <div className="text-2xl font-bold text-primary">
-              {Math.round(testStats.accuracy)}%
-            </div>
-            <div className="text-sm text-muted-foreground">Accuracy</div>
-          </Card>
-          <Card className="p-4 text-center">
-            <div className="text-2xl font-bold text-foreground">
-              {testStats.timeElapsed}s
-            </div>
-            <div className="text-sm text-muted-foreground">Time</div>
-          </Card>
-          <Card className="p-4 text-center">
-            <div className="text-2xl font-bold text-foreground">
-              {testStats.successfulHits}
-            </div>
-            <div className="text-sm text-muted-foreground">Correct Keys</div>
-          </Card>
-          <Card className="p-4 text-center">
-            <div className="text-2xl font-bold text-foreground">
-              {Math.round(testStats.averageDeviation)}%
-            </div>
-            <div className="text-sm text-muted-foreground">Avg Deviation</div>
-          </Card>
-        </div>
-
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex gap-2">
-              {!isTestActive ? (
-                <Button onClick={startTest} className="flex items-center gap-2">
-                  <Play className="w-4 h-4" />
-                  Start Test
-                </Button>
-              ) : (
-                <Button onClick={pauseTest} variant="secondary" className="flex items-center gap-2">
-                  <Pause className="w-4 h-4" />
-                  Pause
-                </Button>
-              )}
-              <Button onClick={resetTest} variant="outline" className="flex items-center gap-2">
-                <RotateCcw className="w-4 h-4" />
-                Reset
+          <div className="flex gap-2">
+            {connectionStatus !== 'connected' ? (
+              <Button size="sm" onClick={connect} className="bg-primary text-primary-foreground font-bold text-[10px] uppercase tracking-widest">
+                <Keyboard size={14} className="mr-2" /> Connect Keyboard
               </Button>
-              <Button
-                onClick={exportToCSV}
-                variant="outline"
-                className="flex items-center gap-2"
-                disabled={attemptHistory.length === 0}
-              >
-                <Download className="w-4 h-4" />
-                Export CSV
-              </Button>
-            </div>
-            <div className="text-m text-muted-foreground">
-              Progress: {currentIndex} / {testSequence.length}
-            </div>
-          </div>
-        </Card>
-
-        {isTestActive && (
-          <Card className="p-6 text-center">
-            {cooldownUntil && Date.now() < cooldownUntil ? (
-              <div className="text-lg text-muted-foreground">Get ready for the next key...</div>
             ) : (
-              <div>
-                <div className="text-2xl text-muted-foreground mb-4">
-                  Type the next letter with the indicated pressure:
+              <Button size="sm" variant="outline" onClick={disconnect} className="text-[10px] font-bold uppercase tracking-widest">Disconnect</Button>
+            )}
+          </div>
+        </div>
+
+        {/* Feedback Bar */}
+        <div className={`flex items-center justify-center gap-3 p-3 rounded-xl border transition-all h-12 ${!lastFeedback ? 'opacity-20' : lastFeedback.type === 'success' ? 'border-green-500/50 bg-green-500/5 text-green-500' : 'border-red-500/50 bg-red-500/5 text-red-500'}`}>
+            {lastFeedback && (
+              <>
+                {lastFeedback.type === 'success' ? <CheckCircle2 size={16}/> : <AlertCircle size={16}/>}
+                <span className="text-xs font-bold uppercase tracking-tight">{lastFeedback.text}</span>
+              </>
+            )}
+        </div>
+
+        {!testComplete ? (
+          <>
+            <div className="flex justify-center gap-2 bg-muted/20 p-1 rounded-lg w-fit mx-auto">
+              {[5, 15].map(n => (
+                <button key={n} disabled={isTestActive} onClick={() => setWordCountGoal(n as 5|15)} className={`px-6 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${wordCountGoal === n ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground'}`}>{n} words</button>
+              ))}
+            </div>
+
+            <Card className="p-16 relative bg-card border-2 border-muted overflow-hidden">
+              {!isTestActive ? (
+                <div className="text-center py-6 space-y-6">
+                  <h2 className="text-3xl font-black uppercase italic tracking-tighter">Pressure Test</h2>
+                  <Button size="lg" onClick={handleStart} className="px-12 font-bold uppercase tracking-[0.2em] h-14">Start Session</Button>
                 </div>
-                <div className="flex justify-center mb-6">
-                  <KeyboardKey
-                    keyChar={testSequence[currentIndex]?.key === ' ' ? '⎵' : testSequence[currentIndex]?.key}
-                    targetPressure={testSequence[currentIndex]?.targetPressure}
-                    currentPressure={getCurrentKeyPress(testSequence[currentIndex]?.keyCode)?.analogValue || 0}
-                    isPressed={getCurrentKeyPress(testSequence[currentIndex]?.keyCode)?.isPressed === 1}
-                    isTarget={true}
-                    className="w-20 h-20 text-10xl"
-                  />
-                </div>
-                <div className="mb-4 text-xl text-muted-foreground">
-                  Target: {getTargetLabel(testSequence[currentIndex]?.targetPressure ?? 50)}
-                </div>
-                <div className="bg-muted p-4 rounded-lg">
-                  <div className="text-sm text-muted-foreground mb-2">Typed so far:</div>
-                  <div className="text-lg font-mono">
-                    {getTypedWords().join(' ')}
+              ) : (
+                <div className="space-y-12 text-center">
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold text-primary uppercase tracking-[0.4em] opacity-80">Target Pressure</p>
+                    <p className="text-3xl font-black">{getTargetLabel(testSequence[currentIndex]?.targetPressure)}</p>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <KeyboardKey
+                      keyChar={testSequence[currentIndex]?.key === ' ' ? '␣' : testSequence[currentIndex]?.key}
+                      targetPressure={testSequence[currentIndex]?.targetPressure}
+                      currentPressure={keyData.find(k => k.keyCode === testSequence[currentIndex]?.keyCode)?.analogValue || 0}
+                      isPressed={keyHeld}
+                      isTarget={true}
+                      className="w-36 h-36 text-7xl border-4"
+                    />
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="text-4xl flex flex-wrap justify-center gap-x-[0.15em] leading-relaxed">
+                      {testSequence.map((item, idx) => {
+                        const isTyped = idx < currentIndex;
+                        const isCurrent = idx === currentIndex;
+                        const result = letterResults[idx];
+                        return (
+                          <span key={idx} className="relative">
+                            {isCurrent && <span className="absolute left-0 top-1 w-1 h-[1.1em] bg-primary animate-pulse rounded-full" />}
+                            <span className={isTyped ? (result?.success ? "text-green-500" : "text-red-500") : "text-muted-foreground/20"}>
+                              {item.key === ' ' ? '\u00A0' : item.key}
+                            </span>
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </Card>
+          </>
+        ) : (
+          /* Results Dashboard */
+          <Card className="p-16 text-center space-y-10 border-4 border-primary/20 bg-card shadow-2xl animate-in zoom-in duration-300">
+            <div className="space-y-2">
+                <Trophy className="w-14 h-14 text-primary mx-auto mb-4" />
+                <h2 className="text-4xl font-black uppercase tracking-tighter italic">Evaluation Complete</h2>
+                <p className="text-muted-foreground text-xs uppercase font-bold tracking-[0.3em]">Performance for {playerName}</p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 border-y border-muted py-12">
+                <div><p className="text-6xl font-black text-primary leading-none">{finalStats.wpm}</p><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-2">wpm</p></div>
+                <div><p className="text-6xl font-black leading-none">{Math.round(finalStats.accuracy)}%</p><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-2">accuracy</p></div>
+                <div><p className="text-6xl font-black leading-none">{finalStats.avgPressure}%</p><p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-2">avg force</p></div>
+            </div>
+
+            <div className="flex justify-center gap-4">
+                <Button onClick={generateTestSequence} variant="outline" className="px-10 h-12 border-2 font-bold uppercase tracking-widest hover:bg-primary hover:text-primary-foreground">
+                    <RotateCcw className="mr-2 w-4 h-4" /> Restart
+                </Button>
+                <Button onClick={exportToCSV} className="px-10 h-12 font-bold uppercase tracking-widest">
+                    <Download className="mr-2 w-4 h-4" /> Export CSV
+                </Button>
+            </div>
           </Card>
         )}
       </div>

@@ -1,0 +1,32 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "pressuretest", "pressuretest", "{8432954D-2F7C-250E-E08C-FE96FF3D4859}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "backend", "backend", "{5F7AD126-CA91-42C9-B2A9-134D917B1823}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WootOverlay", "pressuretest\backend\WootOverlay.csproj", "{7E00DA2D-A103-9356-D0BE-5238599706E6}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7E00DA2D-A103-9356-D0BE-5238599706E6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7E00DA2D-A103-9356-D0BE-5238599706E6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7E00DA2D-A103-9356-D0BE-5238599706E6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7E00DA2D-A103-9356-D0BE-5238599706E6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{5F7AD126-CA91-42C9-B2A9-134D917B1823} = {8432954D-2F7C-250E-E08C-FE96FF3D4859}
+		{7E00DA2D-A103-9356-D0BE-5238599706E6} = {5F7AD126-CA91-42C9-B2A9-134D917B1823}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {20A7D0D2-C645-468D-8374-2C09982F1A9D}
+	EndGlobalSection
+EndGlobal
