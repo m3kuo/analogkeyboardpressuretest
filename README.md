@@ -1,6 +1,6 @@
 # ⌨️ Pressure Type 
 
-**Pressure Type** is an analog-sensitive typing application designed to challenge and evaluate physical keystroke precision. Developed for keyboards with analog Hall-Effect sensors and specificallu for Wooting Keyboards, it gamifies the typing experience by requiring specific pressure depths for every character and for commonly used words.
+**Pressure Type** is an analog-sensitive typing application designed to challenge and evaluate physical keystroke precision. Developed for keyboards with analog Hall-Effect sensors and specificallu for Wooting Keyboards, it gamifies the typing experience by requiring specific pressure depths for every character and for commonly used words. This app is for human computer intearaction reserach purposes. 
 
 ## What is Pressure Type
 
@@ -11,7 +11,7 @@ A utility and interactive web application that measures per-key analog depth. Un
 * **Node.js:** v18.0 or higher.
 * **Backend Driver:** A WebSocket server to stream HID reports to the browser.
 ## Installation
-1. Navigate to the frondend folder and start by npm install then npm run dev
+1. Navigate to the frontend folder and start by npm install then npm run dev
 2. Seperate Terminal Window navigate to the backend and dotnet run
 3. Select Wooting Keyboard
 
