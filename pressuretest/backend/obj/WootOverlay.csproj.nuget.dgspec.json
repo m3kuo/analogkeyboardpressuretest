@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Mitchell\\wooting-combined\\pressuretest\\backend\\WootOverlay.csproj": {}
+    "C:\\Users\\Mitchell\\Documents\\GitHub\\analogkeyboardpressuretest\\pressuretest\\backend\\WootOverlay.csproj": {}
   },
   "projects": {
-    "C:\\Users\\Mitchell\\wooting-combined\\pressuretest\\backend\\WootOverlay.csproj": {
+    "C:\\Users\\Mitchell\\Documents\\GitHub\\analogkeyboardpressuretest\\pressuretest\\backend\\WootOverlay.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Mitchell\\wooting-combined\\pressuretest\\backend\\WootOverlay.csproj",
+        "projectUniqueName": "C:\\Users\\Mitchell\\Documents\\GitHub\\analogkeyboardpressuretest\\pressuretest\\backend\\WootOverlay.csproj",
         "projectName": "WootOverlay",
-        "projectPath": "C:\\Users\\Mitchell\\wooting-combined\\pressuretest\\backend\\WootOverlay.csproj",
+        "projectPath": "C:\\Users\\Mitchell\\Documents\\GitHub\\analogkeyboardpressuretest\\pressuretest\\backend\\WootOverlay.csproj",
         "packagesPath": "C:\\Users\\Mitchell\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Mitchell\\wooting-combined\\pressuretest\\backend\\obj\\",
+        "outputPath": "C:\\Users\\Mitchell\\Documents\\GitHub\\analogkeyboardpressuretest\\pressuretest\\backend\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\Mitchell\\AppData\\Roaming\\NuGet\\NuGet.Config"
