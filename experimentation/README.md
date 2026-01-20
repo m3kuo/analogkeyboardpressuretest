@@ -54,7 +54,7 @@ python -m http.server 8000
 experimentation/
 ├── index.html          # Main HTML interface
 ├── pressuretest.js     # Test logic and event handlers
-├── style.css           # Styling (cloned from analogTyping)
+├── style.css           # Styling 
 ├── wooting-js.js       # WebHID API wrapper for Wooting keyboards
 └── README.md           # This file
 ```
