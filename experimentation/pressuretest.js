@@ -8,16 +8,13 @@ if ("hid" in navigator) {
 }
 
 // Pressure level ranges
-const LIGHT_MIN = 10;
-const LIGHT_MAX = 40;
-const MED_MIN = 41;
-const MED_MAX = 80;
-const MID_MIN = 10;
-const MID_MAX = 90;
-const FULL_MIN = 95;
+const MAX_LEVEL = 255;
+const LIGHT_THRESHOLD = 0.1;
+const MED_THRESHOLD = 0.4;
+const FULL_THRESHOLD = 0.95;
 
 // Home row keys for testing
-const HOME_ROW_KEYS = [4, 22, 7, 9, 10, 11, 13, 14, 15]; // ASDFGHJKL
+const HOME_ROW_KEYS = ["4", "22", "7", "9", "10", "11", "13", "14", "15"]; // ASDFGHJKL
 
 // Global state
 let k, kb;
@@ -32,9 +29,8 @@ let testStats = {
     averageDeviation: 0,
 };
 let attemptHistory = [];
-let maxAnalog = 0;
-let keyHeld = false;
 let targetKeyCode = null;
+const onHeld = new Map();
 
 // DOM Elements
 const connectBtn = document.getElementById("connect");
@@ -50,51 +46,62 @@ const avgDevSpan = document.getElementById("avgDev");
 
 // Pressure level configurations
 const PRESSURE_LEVELS = {
-    2: [50, 100],      // Mid & Full
-    3: [25, 60, 100],  // Light, Medium, Full
-};
+    2: ["light", "full"],      // Mid & Full
+    3: ["light", "Medium", "full"],  // Light, Medium, Full
+}; 
 
 function getTargetLabel(pressure) {
-    if (pressure === 25) return "Light (10–40%)";
-    if (pressure === 60) return "Medium (41–80%)";
-    if (pressure === 50) return "Mid (10–90%)";
-    if (pressure === 100) return "100% (Full)";
+    if(pressureMode == 2){
+        if (pressure === "light") return "Light (10–80%)";
+        if (pressure === "full") return "Full (100%)";
+    }
+    else if(pressureMode == 3){
+        if (pressure === "light") return "Light (10–40%)";
+        if (pressure === "Medium") return "Medium (41–80%)";
+        if (pressure === "full") return "Full (100%)";
+    }
     return "";
 }
 
-function isSuccessForRange(target, percent) {
-    if (target === 25) return percent >= LIGHT_MIN && percent <= LIGHT_MAX;
-    if (target === 60) return percent >= MED_MIN && percent <= MED_MAX;
-    if (target === 50) return percent >= MID_MIN && percent <= MID_MAX;
-    if (target === 100) return percent >= FULL_MIN;
+function isSuccessForRange(target, value) {
+    if(pressureMode == 2){
+        if (target === "light") return value >= MAX_LEVEL * LIGHT_THRESHOLD && value < MAX_LEVEL * FULL_THRESHOLD;
+        if (target === "full") return value >= MAX_LEVEL * FULL_THRESHOLD;
+    }
+    else if(pressureMode == 3){
+        if (target === "light") return value >= MAX_LEVEL * LIGHT_THRESHOLD && value < MAX_LEVEL * MED_THRESHOLD;
+        if (target === "Medium") return value >= MAX_LEVEL * MED_THRESHOLD && value < MAX_LEVEL * FULL_THRESHOLD;
+        if (target === "full") return value >= MAX_LEVEL * FULL_THRESHOLD;
+    }
+
     return false;
 }
 
-function computeDeviationForRange(target, percent) {
-    if (target === 25) {
-        if (percent < LIGHT_MIN) return LIGHT_MIN - percent;
-        if (percent > LIGHT_MAX) return percent - LIGHT_MAX;
-        return 0;
-    }
-    if (target === 60) {
-        if (percent < MED_MIN) return MED_MIN - percent;
-        if (percent > MED_MAX) return percent - MED_MAX;
-        return 0;
-    }
-    if (target === 50) {
-        if (percent < MID_MIN) return MID_MIN - percent;
-        if (percent > MID_MAX) return percent - MID_MAX;
-        return 0;
-    }
-    if (target === 100) {
-        return Math.max(0, 100 - percent);
-    }
-    return 100;
-}
+// function computeDeviationForRange(target, percent) {
+//     if (target === 25) {
+//         if (percent < LIGHT_MIN) return LIGHT_MIN - percent;
+//         if (percent > LIGHT_MAX) return percent - LIGHT_MAX;
+//         return 0;
+//     }
+//     if (target === 60) {
+//         if (percent < MED_MIN) return MED_MIN - percent;
+//         if (percent > MED_MAX) return percent - MED_MAX;
+//         return 0;
+//     }
+//     if (target === 50) {
+//         if (percent < MID_MIN) return MID_MIN - percent;
+//         if (percent > MID_MAX) return percent - MID_MAX;
+//         return 0;
+//     }
+//     if (target === 100) {
+//         return Math.max(0, 100 - percent);
+//     }
+//     return 100;
+// }
 
 function generateTestSequence() {
     currentSequence = [];
-    const levels = PRESSURE_LEVELS[pressureMode] || [25, 60, 100];
+    const levels = PRESSURE_LEVELS[pressureMode] || ["light", "Medium", "full"];
     
     // Generate 20 test items
     for (let i = 0; i < 20; i++) {
@@ -141,19 +148,18 @@ function updateKeyVisualization() {
     }
 }
 
-function recordAttempt(keyCode) {
+function recordAttempt(keyCode, value) {
     if (currentIndex >= currentSequence.length) return;
     
     const currentTarget = currentSequence[currentIndex];
-    const percent = (maxAnalog / 255) * 100;
-    const success = isSuccessForRange(currentTarget.targetPressure, percent);
-    const deviation = computeDeviationForRange(currentTarget.targetPressure, percent);
+    const success = isSuccessForRange(currentTarget.targetPressure, value);
+    // const deviation = computeDeviationForRange(currentTarget.targetPressure, value);
     
     attemptHistory.push({
         keyCode,
         targetPressure: currentTarget.targetPressure,
-        actualPressure: Math.round(percent),
-        deviation: Math.round(deviation),
+        actualPressure: value,
+        // deviation: Math.round(deviation),
         success,
         timestamp: Date.now(),
     });
@@ -162,7 +168,7 @@ function recordAttempt(keyCode) {
     testStats.totalAttempts++;
     if (success) testStats.successfulHits++;
     testStats.accuracy = (testStats.successfulHits / testStats.totalAttempts) * 100;
-    testStats.averageDeviation = (testStats.averageDeviation * (testStats.totalAttempts - 1) + deviation) / testStats.totalAttempts;
+    // testStats.averageDeviation = (testStats.averageDeviation * (testStats.totalAttempts - 1) + deviation) / testStats.totalAttempts;
     
     updateStats();
     
@@ -177,8 +183,6 @@ function recordAttempt(keyCode) {
     
     // Move to next
     currentIndex++;
-    maxAnalog = 0;
-    keyHeld = false;
     
     if (currentIndex >= currentSequence.length) {
         endTest();
@@ -191,7 +195,9 @@ function updateTargetInfo() {
     if (currentIndex < currentSequence.length) {
         const target = currentSequence[currentIndex];
         targetKeyCode = target.keyCode;
-        targetInfoSpan.textContent = `Next: ${getTargetLabel(target.targetPressure)}`;
+        console.log(AnalogKeyCode[targetKeyCode]);
+        targetInfoSpan.textContent = `${AnalogKeyCode[targetKeyCode]} - ${getTargetLabel(target.targetPressure)}`;
+        // targetInfoSpan.textContent = `Next: ${getTargetLabel(target.targetPressure)}`;
         testStatusSpan.textContent = `Item ${currentIndex + 1} / ${currentSequence.length}`;
     }
 }
@@ -215,9 +221,6 @@ connectBtn.addEventListener("click", () => {
         resetTestBtn.disabled = false;
         pressureModeSelect.disabled = false;
         connectBtn.textContent = 'Reconnect';
-        
-        // Update visualization loop
-        setInterval(updateKeyVisualization, 50);
     });
 });
 
@@ -257,36 +260,61 @@ resetTestBtn.addEventListener("click", () => {
     pressureModeSelect.disabled = false;
 });
 
-// Keyboard event listener
-if ("hid" in navigator) {
-    document.addEventListener("keydown", (e) => {
-        if (!isTestActive || !kb) return;
-        
-        const keyCode = e.location === 1 ? e.keyCode + 100 : e.keyCode; // Handle modifiers
-        
-        if (keyCode === targetKeyCode && !keyHeld) {
-            keyHeld = true;
-            maxAnalog = kb.buffer[targetKeyCode] || 0;
-        }
-    });
-    
-    document.addEventListener("keyup", (e) => {
-        if (!isTestActive || !kb || !keyHeld) return;
-        
-        const keyCode = e.location === 1 ? e.keyCode + 100 : e.keyCode;
-        
-        if (keyCode === targetKeyCode && keyHeld) {
-            recordAttempt(targetKeyCode);
-        }
-    });
-    
-    // Continuous pressure monitoring
-    setInterval(() => {
-        if (isTestActive && keyHeld && kb && targetKeyCode) {
-            maxAnalog = Math.max(maxAnalog, kb.buffer[targetKeyCode] || 0);
-        }
-    }, 50);
-}
+
+window.addEventListener("akeydown", (e) => {
+    //console.log("akeydown:" + e.detail.key);
+    if(e.detail.value < MAX_LEVEL * LIGHT_THRESHOLD) return;
+    const element = document.getElementById(e.detail.key);
+        //if (!element) return;
+
+        try {
+            const pressure = e.detail.value;
+            const percent = (pressure / 255) * 100;
+            
+            // Color visualization based on pressure
+            const hue = percent > 80 ? 0 : percent > 50 ? 30 : percent > 20 ? 60 : 120;
+            const saturation = Math.min(100, pressure);
+            element.style.background = `hsl(${hue}, ${saturation}%, ${50 - pressure / 5}%)`;
+            
+            // Show pressure percentage on target key
+            // if (isTestActive && e.detail.key == targetKeyCode) {
+            //     element.textContent = Math.round(percent) + '%';
+            // }
+            
+            // update map
+            if(onHeld.has(e.detail.key)){
+                let value = Math.max(onHeld.get(e.detail.key), e.detail.value);
+                onHeld.set(e.detail.key, value);
+            }
+            else{
+                onHeld.set(e.detail.key, e.detail.value);
+            }
+            //console.log(onHeld.size);
+        } catch (err) { console.log(err)}
+});
+
+window.addEventListener("akeyup", (e) => {
+    //console.log(e.detail);
+    const element = document.getElementById(e.detail.key);
+        if (!element) return;
+
+        try {
+            // Color visualization based on pressure
+            element.style.background = `linear-gradient(90deg, rgba(40,40,40,1) 0%, rgba(34,34,34,1) 50%, rgba(40,40,40,1) 100%)`;
+
+            // update map
+            if(onHeld.has(e.detail.key)){
+                // check correct or not
+                if(targetKeyCode === e.detail.key){
+                    recordAttempt(e.detail.key, onHeld.get(e.detail.key));
+                }                
+                console.log("max: " + onHeld.get(e.detail.key));
+                onHeld.delete(e.detail.key);
+            }
+
+        } catch (err) { console.log(err)}
+});
 
 // Initialize
 generateTestSequence();
+
