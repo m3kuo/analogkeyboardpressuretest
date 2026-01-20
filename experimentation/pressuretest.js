@@ -9,12 +9,13 @@ if ("hid" in navigator) {
 
 // Pressure level ranges
 const MAX_LEVEL = 255;
-const LIGHT_THRESHOLD = 0.1;
+const LIGHT_THRESHOLD = 0.05;
 const MED_THRESHOLD = 0.4;
-const FULL_THRESHOLD = 0.95;
+const MED_HIGH_THRESHOLD = 0.8;
+const FULL_THRESHOLD = 0.98;
 
 // Home row keys for testing
-const HOME_ROW_KEYS = ["4", "22", "7", "9", "10", "11", "13", "14", "15"]; // ASDFGHJKL
+const HOME_ROW_KEYS = ["4", "22", "7", "9", "11", "13", "14", "15"]; // ASDF HJKL
 
 // Global state
 let k, kb;
@@ -39,6 +40,7 @@ const resetTestBtn = document.getElementById("resetTest");
 const pressureModeSelect = document.getElementById("pressureMode");
 const testStatusSpan = document.getElementById("testStatus");
 const targetInfoSpan = document.getElementById("targetInfo");
+const pressInfoSpan = document.getElementById("pressInfo");
 const accuracySpan = document.getElementById("accuracy");
 const attemptsSpan = document.getElementById("attempts");
 const successSpan = document.getElementById("success");
@@ -48,16 +50,23 @@ const avgDevSpan = document.getElementById("avgDev");
 const PRESSURE_LEVELS = {
     2: ["light", "full"],      // Mid & Full
     3: ["light", "Medium", "full"],  // Light, Medium, Full
+    4: ["light", "MediumLow", "MediumHigh", "full"],
 }; 
 
 function getTargetLabel(pressure) {
     if(pressureMode == 2){
-        if (pressure === "light") return "Light (10–80%)";
+        if (pressure === "light") return "Light (10–99%)";
         if (pressure === "full") return "Full (100%)";
     }
     else if(pressureMode == 3){
-        if (pressure === "light") return "Light (10–40%)";
-        if (pressure === "Medium") return "Medium (41–80%)";
+        if (pressure === "light") return "Light (10–50%)";
+        if (pressure === "Medium") return "Medium (51–99%)";
+        if (pressure === "full") return "Full (100%)";
+    }
+    else if(pressureMode == 4){
+        if (pressure === "light") return "Light (10–50%)";
+        if (pressure === "MediumLow") return "Medium Low (51–80%)";
+        if (pressure === "MediumHigh") return "Medium High (81–99%)";
         if (pressure === "full") return "Full (100%)";
     }
     return "";
@@ -71,6 +80,12 @@ function isSuccessForRange(target, value) {
     else if(pressureMode == 3){
         if (target === "light") return value >= MAX_LEVEL * LIGHT_THRESHOLD && value < MAX_LEVEL * MED_THRESHOLD;
         if (target === "Medium") return value >= MAX_LEVEL * MED_THRESHOLD && value < MAX_LEVEL * FULL_THRESHOLD;
+        if (target === "full") return value >= MAX_LEVEL * FULL_THRESHOLD;
+    }
+    else if(pressureMode == 4){
+        if (target === "light") return value >= MAX_LEVEL * LIGHT_THRESHOLD && value < MAX_LEVEL * MED_THRESHOLD;
+        if (target === "MediumLow") return value >= MAX_LEVEL * MED_THRESHOLD && value < MAX_LEVEL * MED_HIGH_THRESHOLD;
+        if (target === "MediumHigh") return value >= MAX_LEVEL * MED_HIGH_THRESHOLD && value < MAX_LEVEL * FULL_THRESHOLD;
         if (target === "full") return value >= MAX_LEVEL * FULL_THRESHOLD;
     }
 
@@ -197,7 +212,7 @@ function updateTargetInfo() {
         targetKeyCode = target.keyCode;
         console.log(AnalogKeyCode[targetKeyCode]);
         targetInfoSpan.textContent = `${AnalogKeyCode[targetKeyCode]} - ${getTargetLabel(target.targetPressure)}`;
-        // targetInfoSpan.textContent = `Next: ${getTargetLabel(target.targetPressure)}`;
+        
         testStatusSpan.textContent = `Item ${currentIndex + 1} / ${currentSequence.length}`;
     }
 }
@@ -275,6 +290,8 @@ window.addEventListener("akeydown", (e) => {
             const hue = percent > 80 ? 0 : percent > 50 ? 30 : percent > 20 ? 60 : 120;
             const saturation = Math.min(100, pressure);
             element.style.background = `hsl(${hue}, ${saturation}%, ${50 - pressure / 5}%)`;
+
+            //pressInfoSpan.textContent = '';
             
             // Show pressure percentage on target key
             // if (isTestActive && e.detail.key == targetKeyCode) {
@@ -307,7 +324,9 @@ window.addEventListener("akeyup", (e) => {
                 // check correct or not
                 if(targetKeyCode === e.detail.key){
                     recordAttempt(e.detail.key, onHeld.get(e.detail.key));
-                }                
+                }
+                let percent = (onHeld.get(e.detail.key) / 255) * 100;
+                pressInfoSpan.textContent = `Pressed: ${Math.round(percent)} %`;
                 console.log("max: " + onHeld.get(e.detail.key));
                 onHeld.delete(e.detail.key);
             }
