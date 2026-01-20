@@ -10,8 +10,8 @@ if ("hid" in navigator) {
 // Pressure level ranges
 const MAX_LEVEL = 255;
 const LIGHT_THRESHOLD = 0.05;
-const MED_THRESHOLD = 0.4;
-const MED_HIGH_THRESHOLD = 0.8;
+const MED_THRESHOLD = 0.35;
+const MED_HIGH_THRESHOLD = 0.7;
 const FULL_THRESHOLD = 0.98;
 
 // Home row keys for testing
@@ -53,6 +53,21 @@ const PRESSURE_LEVELS = {
     4: ["light", "MediumLow", "MediumHigh", "full"],
 }; 
 
+// Function to apply the Fisher-Yates Shuffle
+function shuffleArray(array) {
+
+	// Iterate over the array in reverse order
+	for (let i = array.length - 1; i > 0; i--) {
+
+		// Generate Random Index
+		const j = Math.floor(Math.random() * (i + 1));
+
+		// Swap elements
+		[array[i], array[j]] = [array[j], array[i]];
+	}
+	return array;
+}
+
 function getTargetLabel(pressure) {
     if(pressureMode == 2){
         if (pressure === "light") return "Light (10–99%)";
@@ -64,9 +79,9 @@ function getTargetLabel(pressure) {
         if (pressure === "full") return "Full (100%)";
     }
     else if(pressureMode == 4){
-        if (pressure === "light") return "Light (10–50%)";
-        if (pressure === "MediumLow") return "Medium Low (51–80%)";
-        if (pressure === "MediumHigh") return "Medium High (81–99%)";
+        if (pressure === "light") return "Light (10–40%)";
+        if (pressure === "MediumLow") return "Medium Low (41–70%)";
+        if (pressure === "MediumHigh") return "Medium High (71–99%)";
         if (pressure === "full") return "Full (100%)";
     }
     return "";
@@ -74,22 +89,55 @@ function getTargetLabel(pressure) {
 
 function isSuccessForRange(target, value) {
     if(pressureMode == 2){
-        if (target === "light") return value >= MAX_LEVEL * LIGHT_THRESHOLD && value < MAX_LEVEL * FULL_THRESHOLD;
-        if (target === "full") return value >= MAX_LEVEL * FULL_THRESHOLD;
+        if (target === "light"){
+            if(value >= MAX_LEVEL * FULL_THRESHOLD) return {success: false, reason: "lighter"};
+            else if(value >= MAX_LEVEL * LIGHT_THRESHOLD) return {success: true, reason: ""};
+            else return {success: false, reason: "harder"};
+        }
+        else if (target === "full"){
+            if(value >= MAX_LEVEL * FULL_THRESHOLD) return {success: true, reason: ""};
+            else return {success: false, reason: "harder"};
+        }
     }
     else if(pressureMode == 3){
-        if (target === "light") return value >= MAX_LEVEL * LIGHT_THRESHOLD && value < MAX_LEVEL * MED_THRESHOLD;
-        if (target === "Medium") return value >= MAX_LEVEL * MED_THRESHOLD && value < MAX_LEVEL * FULL_THRESHOLD;
-        if (target === "full") return value >= MAX_LEVEL * FULL_THRESHOLD;
+        if (target === "light"){
+            if(value >= MAX_LEVEL * MED_THRESHOLD) return {success: false, reason: "lighter"};
+            else if(value >= MAX_LEVEL * LIGHT_THRESHOLD) return {success: true, reason: ""};
+            else return {success: false, reason: "harder"};
+        }
+        if (target === "Medium"){
+            if(value >= MAX_LEVEL * FULL_THRESHOLD) return {success: false, reason: "lighter"};
+            else if(value >= MAX_LEVEL * MED_THRESHOLD) return {success: true, reason: ""};
+            else return {success: false, reason: "harder"};
+        }
+        if (target === "full"){
+            if(value >= MAX_LEVEL * FULL_THRESHOLD) return {success: true, reason: ""};
+            else return {success: false, reason: "harder"};
+        }
     }
     else if(pressureMode == 4){
-        if (target === "light") return value >= MAX_LEVEL * LIGHT_THRESHOLD && value < MAX_LEVEL * MED_THRESHOLD;
-        if (target === "MediumLow") return value >= MAX_LEVEL * MED_THRESHOLD && value < MAX_LEVEL * MED_HIGH_THRESHOLD;
-        if (target === "MediumHigh") return value >= MAX_LEVEL * MED_HIGH_THRESHOLD && value < MAX_LEVEL * FULL_THRESHOLD;
-        if (target === "full") return value >= MAX_LEVEL * FULL_THRESHOLD;
+        if (target === "light"){
+            if(value >= MAX_LEVEL * MED_THRESHOLD) return {success: false, reason: "lighter"};
+            else if(value >= MAX_LEVEL * LIGHT_THRESHOLD) return {success: true, reason: ""};
+            else return {success: false, reason: "harder"};
+        }
+        if (target === "MediumLow"){
+            if(value >= MAX_LEVEL * MED_HIGH_THRESHOLD) return {success: false, reason: "lighter"};
+            else if(value >= MAX_LEVEL * MED_THRESHOLD) return {success: true, reason: ""};
+            else return {success: false, reason: "harder"};
+        }
+        if (target === "MediumHigh"){
+            if(value >= MAX_LEVEL * FULL_THRESHOLD) return {success: false, reason: "lighter"};
+            else if(value >= MAX_LEVEL * MED_HIGH_THRESHOLD) return {success: true, reason: ""};
+            else return {success: false, reason: "harder"};
+        }
+        if (target === "full"){
+            if(value >= MAX_LEVEL * FULL_THRESHOLD) return {success: true, reason: ""};
+            else return {success: false, reason: "harder"};
+        }
     }
 
-    return false;
+    return {success: false, reason: ""};
 }
 
 // function computeDeviationForRange(target, percent) {
@@ -115,19 +163,29 @@ function isSuccessForRange(target, value) {
 // }
 
 function generateTestSequence() {
-    currentSequence = [];
+    let sequence = [];
     const levels = PRESSURE_LEVELS[pressureMode] || ["light", "Medium", "full"];
     
     // Generate 20 test items
-    for (let i = 0; i < 20; i++) {
-        const keyCode = HOME_ROW_KEYS[Math.floor(Math.random() * HOME_ROW_KEYS.length)];
-        const targetPressure = levels[Math.floor(Math.random() * levels.length)];
-        currentSequence.push({
-            keyCode,
-            targetPressure,
-        });
+    for (let i = 0; i < levels.length; i++) {
+        const targetPressure = levels[i];
+        for (let j = 0; j < HOME_ROW_KEYS.length; j++) {
+            const keyCode = HOME_ROW_KEYS[j];
+            sequence.push({
+                keyCode,
+                targetPressure,
+            });
+        }
+        // const keyCode = HOME_ROW_KEYS[Math.floor(Math.random() * HOME_ROW_KEYS.length)];
+        // const targetPressure = levels[Math.floor(Math.random() * levels.length)];
+        // currentSequence.push({
+        //     keyCode,
+        //     targetPressure,
+        // });
     }
-    
+    currentSequence = shuffleArray(sequence);
+    // console.log(sequence);
+    // console.log(currentSequence);
     currentIndex = 0;
     attemptHistory = [];
     updateStats();
@@ -167,7 +225,7 @@ function recordAttempt(keyCode, value) {
     if (currentIndex >= currentSequence.length) return;
     
     const currentTarget = currentSequence[currentIndex];
-    const success = isSuccessForRange(currentTarget.targetPressure, value);
+    const ret = isSuccessForRange(currentTarget.targetPressure, value);
     // const deviation = computeDeviationForRange(currentTarget.targetPressure, value);
     
     attemptHistory.push({
@@ -175,13 +233,15 @@ function recordAttempt(keyCode, value) {
         targetPressure: currentTarget.targetPressure,
         actualPressure: value,
         // deviation: Math.round(deviation),
-        success,
+        success: ret.success,
         timestamp: Date.now(),
     });
+
+    if(!ret.success)    pressInfoSpan.textContent = `feedback: press ${ret.reason}`;
     
     // Update stats
     testStats.totalAttempts++;
-    if (success) testStats.successfulHits++;
+    if (ret.success) testStats.successfulHits++;
     testStats.accuracy = (testStats.successfulHits / testStats.totalAttempts) * 100;
     // testStats.averageDeviation = (testStats.averageDeviation * (testStats.totalAttempts - 1) + deviation) / testStats.totalAttempts;
     
@@ -190,7 +250,7 @@ function recordAttempt(keyCode, value) {
     // Highlight success/failure
     const keyElement = document.getElementById(keyCode);
     if (keyElement) {
-        keyElement.style.boxShadow = success ? '0 0 20px #00FF00' : '0 0 20px #FF0000';
+        keyElement.style.boxShadow = ret.success ? '0 0 20px #00FF00' : '0 0 20px #FF0000';
         setTimeout(() => {
             keyElement.style.boxShadow = '';
         }, 500);
@@ -207,12 +267,32 @@ function recordAttempt(keyCode, value) {
 }
 
 function updateTargetInfo() {
-    if (currentIndex < currentSequence.length) {
+    // reset previous target keycode
+    const prevKey = document.getElementById(targetKeyCode);
+    //if (!element) return;
+
+    try {
+        prevKey.style.background = `linear-gradient(90deg, rgba(40,40,40,1) 0%, rgba(34,34,34,1) 50%, rgba(40,40,40,1) 100%)`;
+    }
+    catch (err) { console.log(err)}
+    
+    if (currentIndex < currentSequence.length) {        
         const target = currentSequence[currentIndex];
         targetKeyCode = target.keyCode;
         console.log(AnalogKeyCode[targetKeyCode]);
         targetInfoSpan.textContent = `${AnalogKeyCode[targetKeyCode]} - ${getTargetLabel(target.targetPressure)}`;
-        
+
+        const targetKey = document.getElementById(targetKeyCode);
+        //if (!element) return;
+
+        try {
+            if(target.targetPressure === "light") targetKey.style.background = `#AED6F1`;
+            else if(target.targetPressure === "Medium" || target.targetPressure === "MediumLow") targetKey.style.background = `#5DADE2`;
+            else if(target.targetPressure === "MediumHigh") targetKey.style.background = `#21618C`;
+            else targetKey.style.background = `#283747`;
+        }
+        catch (err) { console.log(err)}
+
         testStatusSpan.textContent = `Item ${currentIndex + 1} / ${currentSequence.length}`;
     }
 }
@@ -283,15 +363,15 @@ window.addEventListener("akeydown", (e) => {
         //if (!element) return;
 
         try {
-            const pressure = e.detail.value;
-            const percent = (pressure / 255) * 100;
+            // const pressure = e.detail.value;
+            // const percent = (pressure / 255) * 100;
             
             // Color visualization based on pressure
-            const hue = percent > 80 ? 0 : percent > 50 ? 30 : percent > 20 ? 60 : 120;
-            const saturation = Math.min(100, pressure);
-            element.style.background = `hsl(${hue}, ${saturation}%, ${50 - pressure / 5}%)`;
+            // const hue = percent > 80 ? 0 : percent > 50 ? 30 : percent > 20 ? 60 : 120;
+            // const saturation = Math.min(100, pressure);
+            // element.style.background = `hsl(${hue}, ${saturation}%, ${50 - pressure / 5}%)`;
 
-            //pressInfoSpan.textContent = '';
+            pressInfoSpan.textContent = '';
             
             // Show pressure percentage on target key
             // if (isTestActive && e.detail.key == targetKeyCode) {
@@ -317,7 +397,7 @@ window.addEventListener("akeyup", (e) => {
 
         try {
             // Color visualization based on pressure
-            element.style.background = `linear-gradient(90deg, rgba(40,40,40,1) 0%, rgba(34,34,34,1) 50%, rgba(40,40,40,1) 100%)`;
+            // element.style.background = `linear-gradient(90deg, rgba(40,40,40,1) 0%, rgba(34,34,34,1) 50%, rgba(40,40,40,1) 100%)`;
 
             // update map
             if(onHeld.has(e.detail.key)){
@@ -325,8 +405,8 @@ window.addEventListener("akeyup", (e) => {
                 if(targetKeyCode === e.detail.key){
                     recordAttempt(e.detail.key, onHeld.get(e.detail.key));
                 }
-                let percent = (onHeld.get(e.detail.key) / 255) * 100;
-                pressInfoSpan.textContent = `Pressed: ${Math.round(percent)} %`;
+                // let percent = (onHeld.get(e.detail.key) / 255) * 100;
+                // pressInfoSpan.textContent = `Pressed: ${Math.round(percent)} %`;
                 console.log("max: " + onHeld.get(e.detail.key));
                 onHeld.delete(e.detail.key);
             }
