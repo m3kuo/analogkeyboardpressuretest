@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AnalogKB Expeiriment</title>
+</head>
+<body>
+<h1> Analog Keyboard Typing Experiment!</h1>
+
+<br>
+    Insert your participant ID, and press start to start experiment.
+    <form action="{{ url_for('.register') }} " method="POST">
+        <label for="ID">Participants ID:</label>
+        <input type="text" id="id" name="id"><br><br>
+        <input type="submit" value="Start Experiment">
+    </form>
+</body>
+</html>
