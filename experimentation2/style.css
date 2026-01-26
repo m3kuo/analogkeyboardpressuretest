@@ -1,0 +1,153 @@
+body {
+	background: #222;
+	overflow-x: hidden;
+}
+.card {
+	margin: 2rem;
+}
+#keyboard {
+	width: 65vw;
+	list-style: none;
+	background: #111;
+	padding-left: 1.5vw;
+	padding-top: 1.3vw;
+	padding-bottom: 0.8vw;
+	margin: 2vw auto;
+	height: 24vw;
+}
+#keyboard li {
+	float: left;
+	margin: 0 0.3vw 0.3vw 0;
+	width: 3vw;
+	height: 3vw;
+	text-align: center;
+	background: linear-gradient(90deg, rgba(40,40,40,1) 0%, rgba(34,34,34,1) 50%, rgba(40,40,40,1) 100%);
+	border: 0.1vw solid #000;
+	border-radius: 0.3vw;
+	color: #ccc;
+	line-height: 1.5vw;
+	font-size: 0.8vw;
+	font-weight: 500;
+    -webkit-user-select: none;
+       -moz-user-select: none;
+        -ms-user-select: none;
+            user-select: none;
+	transition: box-shadow 0.2s ease;
+}
+button:focus, button:active {outline:0 !important;}
+.spacing {
+	content: " ";
+	padding-left: 0.8vw;
+	display: inline;
+}
+.capslock, .tab, .left-shift {
+	clear: left;
+}
+#keyboard .tab {
+	width: 4vw;
+}
+
+#keyboard .delete {
+	width: 6vw;
+}
+
+#keyboard .capslock {
+	width: 5vw;
+}
+#keyboard .return {
+	width: 7.4vw;
+}
+#keyboard .left-shift {
+	width: 7vw;
+}
+#keyboard .right-shift {
+	width: 8.8vw;
+}
+.lastitem {
+	margin-right: 0;
+}
+.uppercase {
+	text-transform: uppercase;
+}
+#keyboard .space {
+	width: 19vw;
+}
+
+.card-header {
+	background-color: #1a1a1a;
+	border-bottom: 1px solid #444;
+	font-weight: 600;
+}
+
+.btn-info {
+	background-color: #0099cc;
+	border-color: #0099cc;
+}
+
+.btn-info:hover {
+	background-color: #0077aa;
+	border-color: #0077aa;
+}
+
+.btn-success {
+	background-color: #00cc99;
+	border-color: #00cc99;
+}
+
+.btn-success:hover {
+	background-color: #009977;
+	border-color: #009977;
+}
+
+.btn-success:disabled {
+	background-color: #666;
+	border-color: #666;
+	cursor: not-allowed;
+}
+
+.btn-warning {
+	background-color: #cc9900;
+	border-color: #cc9900;
+}
+
+.btn-warning:hover {
+	background-color: #997700;
+	border-color: #997700;
+}
+
+.form-control {
+	background-color: #333;
+	border: 1px solid #555;
+	color: #fff;
+}
+
+.form-control:focus {
+	background-color: #333;
+	border-color: #0099cc;
+	color: #fff;
+	box-shadow: none;
+}
+
+.form-control option {
+	background-color: #333;
+	color: #fff;
+}
+
+/* Word display styling */
+#wordsDisplay {
+	font-weight: 500;
+	letter-spacing: 0.1em;
+}
+
+.normal-char {
+	color: #888;
+	opacity: 0.6;
+}
+
+.target-char {
+	color: #F4D03F;
+	background-color: rgba(244, 208, 63, 0.1);
+	padding: 0.2em 0.1em;
+	border-radius: 0.2em;
+	box-shadow: 0 0 0.5em rgba(244, 208, 63, 0.3);
+}

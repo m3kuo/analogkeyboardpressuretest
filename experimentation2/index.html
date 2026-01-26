@@ -1,0 +1,187 @@
+<!doctype html>
+<html>
+
+<head>
+	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.2.1/css/bootstrap.min.css"
+		integrity="sha384-GJzZqFGwb1QTTN6wy59ffF1BuGJpLSa9DkKMp0DgiMDm4iYMj70gZWKYbI706tWS" crossorigin="anonymous">
+	<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+	<div class="container-fluid">
+		<div class="row">
+			<!-- Control Panel -->
+			<div class="card text-white bg-dark col-2">
+				<div class="card-header">Keyboard Info</div>
+				<div class="card-body">
+					Device Name: <span id="deviceName">Not Connected</span><br />
+					Product ID: <span id="productId">-</span><br />
+				</div>
+				<div class="card-body">
+					<div class="card-header">Test Controls</div>
+					<button id="connect" class="btn btn-lg btn-block btn-info mb-2">Connect!</button>
+					<select id="pressureMode" class="form-control mb-2">
+						<option value="2">2 Levels (Mid, Full)</option>
+						<option value="3" selected>3 Levels (Light, Medium, Full)</option>
+						<option value="4">4 Levels (Light, MediumLow, MediumHigh, Full)</option>
+					</select>
+					<button id="startTest" class="btn btn-lg btn-block btn-success" disabled>Start Test</button>
+					<button id="resetTest" class="btn btn-lg btn-block btn-warning mt-2" disabled>Reset</button>
+				</div>
+				<div class="card-body">
+					<div class="card-header">Stats</div>
+					<div>WPM: <span id="wpm">0</span></div>
+					<div>Accuracy: <span id="accuracy">0</span>%</div>
+					<div>Correct: <span id="success">0</span></div>
+					<div>Total: <span id="attempts">0</span></div>
+					<div>Avg Dev: <span id="avgDev">0</span>%</div>
+				</div>
+			</div>
+
+			<!-- Main Content Area -->
+			<div class="col-9">
+				<!-- Status Header -->
+				<div class="row">
+					<div class="card col text-white bg-dark" style="margin: 2rem 2rem 1rem 2rem;">
+						<div class="card-header">
+							<span>Word Typing Test with Pressure Control</span>
+							<span id="testStatus" style="float: right; font-weight: bold;">Idle</span>
+						</div>
+					</div>
+				</div>
+
+				<!-- Word Display -->
+				<div class="row">
+					<div class="card col text-white bg-dark" style="margin: 0 2rem; padding: 2rem;">
+						<div class="card-header" style="border: none; padding: 0 0 1rem 0;">
+							Words to Type:
+						</div>
+						<div id="wordsDisplay" style="font-size: 2rem; font-family: monospace; line-height: 2; min-height: 6rem;">
+							<span style="color: #888;">Press Start Test to begin...</span>
+						</div>
+					</div>
+				</div>
+
+				<!-- Current Key Info -->
+				<div class="row">
+					<div class="card col-6 text-white bg-dark" style="margin: 1rem 2rem 2rem 2rem;">
+						<div class="card-header">Current Key Target</div>
+						<div style="font-size: 3rem; text-align: center; padding: 2rem; color: #F4D03F;">
+							<span id="currentKey">-</span>
+						</div>
+						<div style="text-align: center; font-size: 1.2rem; color: #90EE90;">
+							<span id="pressureTarget">Press Start to begin</span>
+						</div>
+					</div>
+					<div class="card col-3 text-white bg-dark" style="margin: 1rem 2rem 2rem 0;">
+						<div class="card-header">Progress</div>
+						<div style="padding: 2rem;">
+							<div>Progress: <span id="progress">0</span>/<span id="totalChars">0</span></div>
+							<div>Words: <span id="wordProgress">0</span>/<span id="totalWords">0</span></div>
+							<div style="margin-top: 1rem; font-size: 0.9rem;">Time: <span id="timeElapsed">0</span>s</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- Keyboard Visualization -->
+				<div class="row">
+					<div class="card col text-white bg-dark" style="margin: 1rem 2rem 2rem 2rem;">
+						<div class="card-header">Keyboard Pressure Visualization</div>
+						<ul id="keyboard">
+							<li class="symbol" id="41" style="margin-right: 2.3vw;">Esc</li>
+							<li class="symbol" id="58">F1</li>
+							<li class="symbol" id="59">F2</li>
+							<li class="symbol" id="60">F3</li>
+							<li class="symbol" id="61" style="margin-right: 2.3vw;">F4</li>
+							<li class="symbol" id="62">F5</li>
+							<li class="symbol" id="63">F6</li>
+							<li class="symbol" id="64">F7</li>
+							<li class="symbol" id="65" style="margin-right: 2.3vw;">F8</li>
+							<li class="symbol" id="66">F9</li>
+							<li class="symbol" id="67">F10</li>
+							<li class="symbol" id="68">F11</li>
+							<li class="symbol" id="69" style="margin-right: 3.2vw;">F12</li>
+							<li class="symbol" id="70">Prt Sc</li>
+							<li class="symbol" id="72">Pause</li>
+							<li class="symbol lastitem" id="71">ScrLk</li>
+							<li style="width: 100%; height: 1vw !important; visibility: hidden"> </li>
+							<li class="symbol" id="53">`<div class="spacing"></div>~</li>
+							<li class="symbol" id="30">1</li>
+							<li class="symbol" id="31">2</li>
+							<li class="symbol" id="32">3</li>
+							<li class="symbol" id="33">4</li>
+							<li class="symbol" id="34">5</li>
+							<li class="symbol" id="35">6</li>
+							<li class="symbol" id="36">7</li>
+							<li class="symbol" id="37">8</li>
+							<li class="symbol" id="38">9</li>
+							<li class="symbol" id="39">0</li>
+							<li class="symbol" id="45">-</li>
+							<li class="symbol" id="46">=</li>
+							<li class="delete" id="42" style="margin-right: 3vw;">Backspace</li>
+							<li class="symbol" id="73">Ins</li>
+							<li class="symbol" id="74">Home</li>
+							<li class="symbol lastitem" id="75">Pg Up</li>
+							<li class="tab" id="43">Tab</li>
+							<li class="letter" id="20">Q</li>
+							<li class="letter" id="26">W</li>
+							<li class="letter" id="8">E</li>
+							<li class="letter" id="21">R</li>
+							<li class="letter" id="23">T</li>
+							<li class="letter" id="28">Y</li>
+							<li class="letter" id="24">U</li>
+							<li class="letter" id="12">I</li>
+							<li class="letter" id="18">O</li>
+							<li class="letter" id="19">P</li>
+							<li class="symbol" id="47">[</li>
+							<li class="symbol" id="48">]</li>
+							<li class="symbol" id="49" style="width: 5vw; margin-right: 3vw;">\</li>
+							<li class="symbol" id="76">Del</li>
+							<li class="symbol" id="77">End</li>
+							<li class="symbol lastitem" id="78">Pg Dn</li>
+							<li class="capslock" id="57">Caps</li>
+							<li class="letter" id="4">A</li>
+							<li class="letter" id="22">S</li>
+							<li class="letter" id="7">D</li>
+							<li class="letter" id="9">F</li>
+							<li class="letter" id="10">G</li>
+							<li class="letter" id="11">H</li>
+							<li class="letter" id="13">J</li>
+							<li class="letter" id="14">K</li>
+							<li class="letter" id="15">L</li>
+							<li class="symbol" id="51">;</li>
+							<li class="symbol" id="52">'</li>
+							<li class="return lastitem" id="40">Return</li>
+							<li class="left-shift" id="225">Shift</li>
+							<li class="letter" id="29">Z</li>
+							<li class="letter" id="27">X</li>
+							<li class="letter" id="6">C</li>
+							<li class="letter" id="25">V</li>
+							<li class="letter" id="5">B</li>
+							<li class="letter" id="17">N</li>
+							<li class="letter" id="16">M</li>
+							<li class="symbol" id="54">,</li>
+							<li class="symbol" id="55">.</li>
+							<li class="symbol" id="56">/</li>
+							<li class="right-shift" id="229">Shift</li>
+							<li class="symbol lastitem" style="margin-left: 5.9vw; margin-right: 4vw;" id="82">Up</li>
+							<li class="symbol" style="width: 4vw;" id="224">Ctrl</li>
+							<li class="symbol" style="width: 4vw;" id="227">Win</li>
+							<li class="symbol" style="width: 4vw;" id="226">Alt</li>
+							<li class="space" id="44" style="width: 25vw;"></li>
+							<li class="symbol" style="width: 4vw;" id="230">Alt</li>
+							<li class="symbol" style="width: 4vw;" id="231">Menu</li>
+							<li class="symbol" style="margin-left: 5.9vw; margin-right: 4vw;" id="80">Left</li>
+							<li class="symbol" style="margin-right: 4vw;" id="81">Down</li>
+							<li class="symbol" id="79">Right</li>
+						</ul>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<script type="module" src="wordtest.js"></script>
+</body>
+
+</html>
