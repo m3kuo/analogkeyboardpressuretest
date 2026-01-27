@@ -1,0 +1,498 @@
+---
+title: "trial results"
+author: "Allen Yeh"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```
+```
+
+```{r warning=FALSE}
+library(tidyverse)
+library(gmodels)
+library(rstatix)
+library(ggplot2)
+library(ez)
+```
+
+### Import data
+
+#### Read the csv file and claim the data type
+```{r}
+
+participant_id = c("0")
+
+key_code = c("A", "S", "D", "F", "H", "J", "K", "L")
+
+level_code = c("light", "medium", "mediumLow", "mediumHigh", "full")
+
+# Initialize an empty data frame
+trial_log = NULL
+
+for (x in participant_id) {
+  filename <- paste("./../results/", x, ".csv", sep="")
+  trial_user_log <- read_csv(filename, col_types = cols(
+    id = col_factor(levels = participant_id),
+    level = col_integer(),
+    block = col_integer(),
+    trial = col_integer(),
+    levelCounts = col_factor(levels = c("2", "3", "4")),
+    targetKey = col_factor(levels = key_code),
+    targetLevel = col_factor(levels = level_code),
+    pressedLevel = col_factor(levels = level_code),
+    pressedRaw = col_integer(),
+    isSuccessful = col_logical(),
+    startTime = col_double(),
+    endTime = col_double(),
+    time = col_double(),
+  )) %>% filter(block != 0)
+  trial_log = bind_rows(trial_log,trial_user_log)
+}
+
+
+```
+
+### functions
+
+```{r warning=FALSE}
+percent <- function(num, digits = 2, ...) {      
+  percentage <-formatC(num * 100, format = "f", digits = digits, ...)
+  
+  # appending "%" symbol at the end of
+  # calculate percentage value
+  paste0(percentage, "%")
+}
+```
+
+### Total
+
+#### block accuracy
+```{r warning=FALSE}
+
+log_block_accuracy <- trial_log %>%
+  group_by(id, levelCounts, block) %>%
+  summarize(
+    accuracy_ave = sum(isSuccessful) / n(),
+    n_trials = n()
+  ) %>%
+  ungroup() %>%
+  arrange(id, levelCounts, block)
+
+log_accuracy_summary <- log_block_accuracy  %>%
+  group_by(block, levelCounts) %>%
+  summarize(
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(block, levelCounts)
+
+log_accuracy_summary
+
+pd <- position_dodge(width = 0.3)
+log_accuracy_summary %>% ggplot(
+  aes(
+    x = block,
+    y = meanAccuracy,
+    ymin = meanAccuracy,
+    ymax = meanAccuracy,
+    color = levelCounts
+  )
+) +
+  geom_pointrange(position = pd) 
+
+shapiro.test(log_block_accuracy$accuracy_ave)
+
+qqnorm(log_block_accuracy$accuracy_ave); qqline(log_block_accuracy$accuracy_ave, col = 2)
+
+```
+
+#### word per seoncd - per participant
+```{r warning=FALSE}
+
+trial_participant_wpm <-trial_log %>%
+  group_by(pid) %>%
+  summarize(
+    meanWPM = wpm %>% mean(na.rm=TRUE),
+    lowCIWPM = ci(wpm)[2]%>% pmax(0),
+    highCIWPM = ci(wpm)[3],
+    sdWPM = ci(wpm)[4],
+    stdWPM = wpm %>% sd()) %>%
+  ungroup()
+
+trial_participant_wpm
+
+trial_participant_uwer <-trial_log %>%
+    group_by(pid) %>%
+  summarize(
+    meanuwer = uwer %>% mean(na.rm=TRUE),
+    lowCIuwer = ci(uwer)[2]%>% pmax(0),
+    highCIuwer = ci(uwer)[3],
+    sduwer = ci(uwer)[4],
+    stduwer = uwer %>% sd())%>%
+  ungroup()
+
+trial_participant_uwer
+
+trial_participant_cwer <-trial_log %>%
+    group_by(pid) %>%
+  summarize(
+    meacuwer = cwer %>% mean(na.rm=TRUE),
+    lowCIcwer = ci(cwer)[2]%>% pmax(0),
+    highCIcwer = ci(cwer)[3],
+    sdcwer = ci(cwer)[4],
+    stdcwer = cwer %>% sd())%>%
+  ungroup()
+
+trial_participant_cwer
+
+# line + dot
+trial_participant_wpm_graph <- ggplot(trial_participant_wpm) +
+  geom_pointrange( aes(x=pid, y=meanWPM, ymin=lowCIWPM, ymax=highCIWPM), alpha=0.9, size=0.8, colour="#566573") +
+  scale_y_continuous(limits=c(5.0, 30.0))
+
+trial_participant_wpm_graph
+
+trial_participant_wpm_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_line( size=.1, color="gray" ),
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("wpm participants.pdf", width = 20, height = 10)
+
+```
+
+### Swipe Typing Usage
+
+#### participant
+
+```{r warning=FALSE}
+
+swipe_usage_participant <-usage_log %>%
+  filter(type == 'swipe')%>%
+  summarize(
+    meanusage = usage %>% mean(na.rm=TRUE),
+    lowCIusage = ci(usage)[2]%>% pmax(0),
+    highCIusager = ci(usage)[3]%>% pmin(1),
+    sdusage = ci(usage)[4],
+    stdusage = usage %>% sd())
+
+swipe_usage_participant
+
+usage_participant_graph <- ggplot(usage_log, aes(fill=type, y=usage, x=pid, label = percent(usage, 1))) + 
+  geom_bar(position=position_stack(reverse = TRUE), stat="identity", width=0.5) +
+  geom_text(size = 3, position = position_stack(reverse = TRUE, vjust = 0.5)) +
+  scale_fill_discrete(breaks = c('tap', 'swipe')) +
+  scale_fill_manual(values = c('tap' = "#2ECC71", 'swipe' = "#3498DB"))
+
+usage_participant_graph
+
+usage_participant_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_line( size=.1, color="gray" ),
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("usage participant.pdf", width = 20, height = 10, limitsize = FALSE)
+
+
+```
+#### char count
+
+```{r warning=FALSE}
+
+word_count <- word_log %>% 
+  group_by(count, usage, .drop = FALSE) %>% count()
+
+word_count_summary <- word_count %>% 
+  group_by(count) %>%
+  summarize(
+    ratio = n / sum(n),
+    n_trials = sum(n),
+    usage = usage,
+    n = n,
+  ) %>%
+  ungroup()
+
+usage_word_graph <- ggplot(word_count_summary, aes(fill=usage, y=ratio, x=count, label = percent(ratio, 1))) + 
+  geom_bar(position=position_stack(reverse = TRUE), stat="identity", width=0.5) +
+  geom_text(size = 3, position = position_stack(reverse = TRUE, vjust = 0.5)) +
+  scale_fill_discrete(breaks = c('tap', 'swipe')) +
+  scale_fill_manual(values = c('tap' = "#2ECC71", 'swipe' = "#3498DB"))
+
+usage_word_graph
+
+
+usage_word_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_line( size=.1, color="gray" ),
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("usage word.pdf", width = 11, height = 10, limitsize = FALSE)
+
+
+```
+
+### word
+
+#### accuracy
+```{r warning=FALSE}
+
+word_accuracy <- word_log %>% 
+  group_by(count, category, .drop = FALSE) %>% count()
+
+word_accuracy_summary <-word_accuracy %>%
+  group_by(count) %>%
+  summarize(
+    ratio = n / sum(n),
+    n_trials = sum(n),
+    category = category,
+    n = n,
+    )%>%
+  ungroup()
+
+word_accuracy_summary
+
+word_accuracy_summary_top1 <-word_accuracy_summary %>%
+  filter(category == 'top1') %>%
+  group_by(count) %>%
+  summarize(
+    top1_accuracy = sum(ratio),
+    )
+
+word_accuracy_summary_top3 <-word_accuracy_summary %>%
+  filter(category == 'top1' | category == 'top3') %>%
+  group_by(count) %>%
+  summarize(
+    top3_accuracy = sum(ratio),
+    )
+
+word_accuracy <- left_join(word_accuracy_summary_top1, word_accuracy_summary_top3, by = "count") 
+word_accuracy
+
+```
+
+#### accuracy - with swipe
+```{r warning=FALSE}
+
+word_swipe_accuracy <- word_log %>% 
+  filter(swipe_key_count != 0) %>%
+  group_by(count, category, .drop = FALSE) %>% count()
+
+word_swipe_accuracy_summary <-word_swipe_accuracy %>%
+  group_by(count) %>%
+  summarize(
+    ratio = n / sum(n),
+    n_trials = sum(n),
+    category = category,
+    n = n,
+    )%>%
+  ungroup()
+
+word_swipe_accuracy_summary
+
+word_swipe_accuracy_summary_top1 <-word_swipe_accuracy_summary %>%
+  filter(category == 'top1') %>%
+  group_by(count) %>%
+  summarize(
+    top1_accuracy = sum(ratio),
+    n = n_trials,
+    )
+
+word_swipe_accuracy_summary_top3 <-word_swipe_accuracy_summary %>%
+  filter(category == 'top1' | category == 'top3') %>%
+  group_by(count) %>%
+  summarize(
+    top3_accuracy = sum(ratio),
+    )
+
+word_swipe_accuracy <- left_join(word_swipe_accuracy_summary_top1, word_swipe_accuracy_summary_top3, by = "count") 
+word_swipe_accuracy
+
+```
+
+#### time
+```{r warning=FALSE}
+
+word_time_summary <-word_log %>%
+  filter(category == 'top1' | category == 'top3' | is_match) %>%
+  group_by(count, usage) %>%
+  summarize(
+    meanTime = time %>% mean(na.rm=TRUE),
+    lowCITime = ci(time)[2]%>% pmax(0),
+    highCITime = ci(time)[3],
+    sdTime = ci(time)[4],
+    stdTime = time %>% sd()) %>%
+  ungroup()
+
+word_time_summary
+
+# line + dot
+word_time_graph <- ggplot(word_time_summary) +
+  geom_pointrange( aes(x=count, y=meanTime, ymin=lowCITime, ymax=highCITime,color=reorder(usage, desc(usage))), alpha=0.9, size=0.8, position=position_dodge(width=1.0)) +
+  scale_y_continuous(limits=c(0.0,10.0), breaks = seq(0, 10.0, by = 2)) +
+  scale_colour_manual(values = c("swipe" = "#3498DB", "tap" = "#2ECC71"))
+
+word_time_graph
+
+word_time_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_line( size=.1, color="gray" ),
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("time usage count.pdf", width = 11, height = 10)
+```
+
+#### within swipe
+##### swipe-tap ratio (key count)
+```{r warning=FALSE}
+
+word_swipe <-word_log %>%
+  filter(usage == 'swipe') %>%
+  filter(category == 'top1' | category == 'top3') %>%
+  filter(is_match)
+
+word_swipe_ratio_summary <-word_swipe %>%
+  group_by(count) %>%
+  summarize(
+    meanRatio = swipe_ratio %>% mean(na.rm=TRUE),
+    lowCIRatio = ci(swipe_ratio)[2]%>% pmax(0),
+    highCIRatio = ci(swipe_ratio)[3]%>% pmin(1),
+    sdRatio = ci(swipe_ratio)[4],
+    stdRatio = swipe_ratio %>% sd()) %>%
+  ungroup()
+
+word_swipe_ratio_summary
+
+
+word_swipe_key_summary <-word_swipe %>%
+  group_by(count) %>%
+  summarize(
+    meanRatio = swipe_key_count %>% mean(na.rm=TRUE),
+    lowCIRatio = ci(swipe_key_count)[2]%>% pmax(0),
+    highCIRatio = ci(swipe_key_count)[3],
+    sdRatio = ci(swipe_key_count)[4],
+    stdRatio = swipe_key_count %>% sd()) %>%
+  ungroup()
+
+word_swipe_key_summary
+```
+
+##### swipe distance
+
+```{r warning=FALSE}
+
+
+swipe_dist <- swipe_log %>%
+  summarize(
+    meanDist = distance %>% mean(na.rm=TRUE),
+    lowCIDist = ci(distance)[2]%>% pmax(0),
+    highCIDist = ci(distance)[3],
+    sdDist = ci(distance)[4],
+    stdDist = distance %>% sd())
+
+swipe_dist
+
+swipe_target_dist <- swipe_log %>%
+  summarize(
+    meanDist = target_distance %>% mean(na.rm=TRUE),
+    lowCIDist = ci(target_distance)[2]%>% pmax(0),
+    highCIDist = ci(target_distance)[3],
+    sdDist = ci(target_distance)[4],
+    stdDist = target_distance %>% sd())
+
+swipe_target_dist
+
+swipe_bin_count <- swipe_log %>% 
+  group_by(target_dist_bin) %>% count()
+swipe_bin_count
+
+swipe_dist_bin <- swipe_log %>%
+  group_by(target_dist_bin) %>%
+  summarize(
+    meanDist = distance %>% mean(na.rm=TRUE),
+    lowCIDist = ci(distance)[2]%>% pmax(0),
+    highCIDist = ci(distance)[3],
+    sdDist = ci(distance)[4],
+    stdDist = distance %>% sd()) %>%
+  ungroup()
+
+swipe_dist_bin
+
+swipe_target_dist_bin <- swipe_log %>%
+  group_by(target_dist_bin) %>%
+  summarize(
+    meanTDist = target_distance %>% mean(na.rm=TRUE),
+    lowCITDist = ci(target_distance)[2]%>% pmax(0),
+    highCITDist = ci(target_distance)[3],
+    sdTDist = ci(target_distance)[4],
+    stdTDist = target_distance %>% sd())%>%
+  ungroup()
+
+swipe_target_dist_bin
+
+swipe_target_dist_res <- swipe_bin_count %>%
+  left_join(swipe_dist_bin) %>%
+  left_join(swipe_target_dist_bin) %>%
+  select(target_dist_bin, n, meanDist, meanTDist)
+
+swipe_target_dist_res
+
+```
+
+
+##### swipe pair count
+```{r warning=FALSE}
+
+swipe_pair_count <- swipe_log %>% 
+  group_by(pair, .drop = FALSE) %>% count()
+
+```
+
+##### swipe finger
+```{r warning=FALSE}
+
+participant_id = c("3", "4", "6", "15", "16", "22", "23")
+
+swipe_finger <- swipe_log %>% 
+  filter(pid %in% participant_id)%>% 
+  group_by(finger, pair, .drop = FALSE) %>% count()
+
+write.csv(swipe_finger,"logs/swipe_finger_count.csv", row.names = TRUE)
+```
+

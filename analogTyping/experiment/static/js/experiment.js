@@ -208,7 +208,7 @@ function recordAttempt(keyCode, value) {
         "block": currentBlock,
         "trial": currentTrial,
         "levelCounts": pressureMode,
-        "targetKey": currentTarget.key,
+        "targetKey": AnalogKeyCode[currentTarget.key],
         "targetLevel": currentTarget.pressure,
         "pressedLevel": ret.pressed,
         "pressedRaw": value,
@@ -262,14 +262,14 @@ function updateTargetInfo() {
         //if (!element) return;
 
         try {
-            if (target.pressure === "light") targetKey.style.background = `#AED6F1`;
-            else if (target.pressure === "Medium" || target.targetPressure === "MediumLow") targetKey.style.background = `#5DADE2`;
-            else if (target.pressure === "MediumHigh") targetKey.style.background = `#21618C`;
-            else targetKey.style.background = `#283747`;
+            if (target.pressure === "light") targetKey.style.background = `#FCF3CF`;
+            else if (target.pressure === "medium" || target.pressure === "mediumLow") targetKey.style.background = `#F4D03F`;
+            else if (target.pressure === "mediumHigh") targetKey.style.background = `#E67E22`;
+            else targetKey.style.background = `#943126`;
         }
         catch (err) { console.log(err) }
 
-        testStatusSpan.textContent = `Item ${currentTrial + 1} / ${currentTrials[currentLevel].trialBlock[currentBlock].sequence.length}`;
+        testStatusSpan.textContent = `Trial ${currentTrial + 1} / ${currentTrials[currentLevel].trialBlock[currentBlock].sequence.length}`;
 
         startTime = Date.now()
     }
@@ -355,8 +355,8 @@ window.addEventListener("akeyup", (e) => {
             if (e.detail.key === "44") {
                 if (!isTestActive) {
                     isTestActive = true;
-                    updateTargetInfo();
                     testStatusSpan.textContent = 'Running...';
+                    updateTargetInfo();                    
                 }
             }
 

@@ -87,7 +87,7 @@ def createTrials(id):
         with open(PARTICIPANTS_logs, 'w') as f:
             f.write(json.dumps(log_status))
 
-    PARTICIPANTS_results = os.path.join(RESULT_DIR, id + '.json')
+    PARTICIPANTS_results = os.path.join(RESULT_DIR, id + '.csv')
     if not os.path.exists(PARTICIPANTS_results):
         with open(PARTICIPANTS_results, 'w', newline='') as csvfile:
             fieldnames = ['id', 'level','block', 'trial', 'levelCounts', 'targetKey', 'targetLevel', 'pressedLevel', 'pressedRaw', 'isSuccessful', 'startTime', 'endTime', 'time']
@@ -210,7 +210,7 @@ def log():
     data = request.json
     print(data)
 
-    PARTICIPANTS_results = os.path.join(RESULT_DIR, data["result"]["id"] + '.json')
+    PARTICIPANTS_results = os.path.join(RESULT_DIR, data["result"]["id"] + '.csv')
     with open(PARTICIPANTS_results, 'a', newline='') as csvfile:
         fieldnames = ['id', 'level','block', 'trial', 'levelCounts', 'targetKey', 'targetLevel', 'pressedLevel', 'pressedRaw', 'isSuccessful', 'startTime', 'endTime', 'time']
 
