@@ -155,10 +155,26 @@ def study():
 def training():
     return render_template('training.html')
 
-#view function for indoor games option present on HTML page
 @typingPage.route('/experiment')
 def experiment():
     return render_template('experiment.html')
+
+@typingPage.route('/blockBreak')
+def blockBreak():
+    print("blockBreak")
+    status = json.loads(session['status'])
+    id = json.loads(session['id'])
+    print(status)
+    level = status['level']
+    block = status['block']
+    trial = status['trial']
+
+    if block == 0:
+        #end of study
+        return render_template('survey.html')
+    else:
+        return render_template('break.html')
+
 
 @typingPage.route('/')
 def welcome():
@@ -192,7 +208,7 @@ def endblock():
         #end of study
         return redirect(url_for('.experiment'))
     else:
-        return redirect(url_for('.study'))
+        return redirect(url_for('.blockBreak'))
 
 
 @typingPage.route('/api/debug', methods=["POST"])
