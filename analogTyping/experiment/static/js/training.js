@@ -15,7 +15,7 @@ const MED_HIGH_THRESHOLD = 0.7;
 const FULL_THRESHOLD = 0.98;
 
 // Home row keys for testing
-const HOME_ROW_KEYS = ["4", "22", "7", "9", "11", "13", "14", "15"]; // ASDF HJKL
+const HOME_ROW_KEYS = ["4", "22", "7", "9", "13", "14", "15", "51"]; // ASDF HJKL
 
 // Global state
 let k, kb;

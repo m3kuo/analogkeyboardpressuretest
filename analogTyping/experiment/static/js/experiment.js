@@ -256,16 +256,33 @@ function updateTargetInfo() {
     if (currentTrial < currentTrials[currentLevel].trialBlock[currentBlock].sequence.length) {
         const target = currentTrials[currentLevel].trialBlock[currentBlock].sequence[currentTrial];
         console.log(AnalogKeyCode[target.key]);
-        targetInfoSpan.textContent = `${AnalogKeyCode[target.key]} - ${getTargetLabel(target.pressure)}`;
+        if(target.key === "51"){
+            targetInfoSpan.textContent = `; - ${getTargetLabel(target.pressure)}`;
+        }
+        else{
+            targetInfoSpan.textContent = `${AnalogKeyCode[target.key]} - ${getTargetLabel(target.pressure)}`;
+        }
 
         const targetKey = document.getElementById(target.key);
         //if (!element) return;
 
         try {
-            if (target.pressure === "light") targetKey.style.background = `#FCF3CF`;
-            else if (target.pressure === "medium" || target.pressure === "mediumLow") targetKey.style.background = `#F4D03F`;
-            else if (target.pressure === "mediumHigh") targetKey.style.background = `#E67E22`;
-            else targetKey.style.background = `#943126`;
+            if (target.pressure === "light"){
+                 targetKey.style.background = `#FCF3CF`;
+                 targetInfoSpan.style.color = `#FCF3CF`;
+            }
+            else if (target.pressure === "medium" || target.pressure === "mediumLow"){
+                targetKey.style.background = `#F4D03F`;
+                targetInfoSpan.style.color = `#F4D03F`;
+            } 
+            else if (target.pressure === "mediumHigh"){
+                targetKey.style.background = `#E67E22`;
+                targetInfoSpan.style.color = `#E67E22`;
+            } 
+            else{
+                targetKey.style.background = `#943126`;
+                targetInfoSpan.style.color = `#943126`;
+            } 
         }
         catch (err) { console.log(err) }
 
