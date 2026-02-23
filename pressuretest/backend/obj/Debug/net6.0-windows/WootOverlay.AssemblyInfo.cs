@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("WootOverlay")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+bd84cee90e9d554f3dead3c7a7c6e5774ec67a45")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3dff72c260d46854f4c1542afdf0f1e4bc4b1303")]
 [assembly: System.Reflection.AssemblyProductAttribute("WootOverlay")]
 [assembly: System.Reflection.AssemblyTitleAttribute("WootOverlay")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

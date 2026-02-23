@@ -17,7 +17,33 @@ const MED_THRESHOLD = 0.35;
 const MED_HIGH_THRESHOLD = 0.7;
 const FULL_THRESHOLD = 0.98;
 
-const NUM_WORDS = 5;
+// Number of phrases/sentences per test (around 2 sentences as requested)
+const NUM_WORDS = 2;
+
+// Loaded phrases from word.txt (one phrase per line). Fallback to COMMON_WORDS if empty.
+let PHRASES = [];
+
+// Utility: Fisher-Yates shuffle
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+// Load phrases from local word.txt (served alongside index.html).
+async function loadPhrases() {
+  try {
+    const res = await fetch('word.txt');
+    if (!res.ok) throw new Error('Failed to fetch word.txt');
+    const txt = await res.text();
+    PHRASES = txt.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+    console.log(`Loaded ${PHRASES.length} phrases from word.txt`);
+  } catch (err) {
+    console.warn('Could not load word.txt, falling back to COMMON_WORDS:', err);
+    PHRASES = [];
+  }
+}
 
 // Common words for testing
 const COMMON_WORDS = [
@@ -61,6 +87,19 @@ const PRESSURE_LEVELS = {
   ]
 };
 
+// Prevent spacebar activating controls that could regenerate words when test is NOT active.
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.key === ' ') {
+    const ae = document.activeElement;
+    if (!isTestActive && ae) {
+      // If focus is on the Start/Reset buttons or the pressureMode select, block space from activating them
+      if (ae.id === 'startTest' || ae.id === 'resetTest' || ae.id === 'pressureMode') {
+        e.preventDefault();
+      }
+    }
+  }
+});
+
 // =======================
 // State
 // =======================
@@ -89,6 +128,7 @@ let currentTargetPressure = null;  // word-level target (same for all letters in
 
 let keyIsPressed = false;
 let maxPressureOnKeyHold = 0;
+let allowRetypeMode = false; // when true, allow typing the final highlighted char after test end
 
 // Intervals (so they don’t stack on every Start)
 let vizIntervalId = null;
@@ -251,15 +291,17 @@ function updateKeyVisualization() {
 }
 
 function updateCurrentKeyInfo() {
-  // Ensure we never require space
-  skipSpaces();
-
   if (currentCharIndex >= getTotalChars()) return;
 
   const { char, wordIndex } = getCharAtGlobalIndex(currentCharIndex);
 
-  // Word-level pressure: inherit from the word you're currently typing
-  currentTargetPressure = testWords[wordIndex]?.targetPressure ?? null;
+  // If the current char is a space, treat its target as 'Any' (no specific pressure)
+  if (char === ' ') {
+    currentTargetPressure = null;
+  } else {
+    // Word-level pressure: inherit from the word you're currently typing
+    currentTargetPressure = testWords[wordIndex]?.targetPressure ?? null;
+  }
 
   currentKeyCodeRequired = KEY_CODE_MAP[(char || ' ').toLowerCase()] || null;
 
@@ -284,23 +326,42 @@ function recordAttempt(keyCode, pressureNormalized, success) {
   // NOTE: averageDeviation not implemented (you can add it if you want)
   updateStats();
 
-  // Advance one character
-  currentCharIndex++;
+  // Determine if we're on the final character
+  const lastIndex = getTotalChars() - 1;
+  const isLastChar = currentCharIndex === lastIndex;
+
+  // Reset hold state
   keyIsPressed = false;
   maxPressureOnKeyHold = 0;
 
-  // Auto-skip spaces (no space key needed)
-  skipSpaces();
-
-  if (currentCharIndex >= getTotalChars()) {
-    endTest();
-  } else {
+  if (isLastChar) {
+    // Do NOT advance past the last character — keep it highlighted so user can retype it.
+    // Show results immediately but allow retyping the final char.
+    allowRetypeMode = true;
+    endTest(/*keepRetype=*/ true);
+    // Keep currentCharIndex unchanged so highlight remains on final char.
     updateDisplay();
     updateCurrentKeyInfo();
+  } else {
+    // Advance one character
+    currentCharIndex++;
+
+    // Auto-skip spaces (no space key needed)
+    skipSpaces();
+
+    if (currentCharIndex >= getTotalChars()) {
+      // If advancing lands past end (edge-case), end test normally
+      endTest();
+    } else {
+      updateDisplay();
+      updateCurrentKeyInfo();
+    }
   }
 }
 
 function endTest() {
+  // Default behaviour: end the test and clear running intervals.
+  // If allowRetypeMode is active we still show results but keep the final char active.
   isTestActive = false;
 
   testStatusSpan.textContent = 'Complete!';
@@ -332,9 +393,34 @@ function updateTimeAndWPM() {
 function generateTestSequence() {
   testWords = [];
 
-  for (let i = 0; i < NUM_WORDS; i++) {
-    const w = COMMON_WORDS[Math.floor(Math.random() * COMMON_WORDS.length)];
-    testWords.push({ text: w, targetPressure: getTargetPressure() });
+  const n = NUM_WORDS;
+  if (PHRASES.length > 0) {
+    // Sample n unique phrases randomly
+    const indices = Array.from({ length: PHRASES.length }, (_, i) => i);
+    shuffleArray(indices);
+    const chosen = indices.slice(0, Math.min(n, indices.length));
+
+    // Build balanced distribution of pressure level indices for even coverage
+    const levels = PRESSURE_LEVELS[pressureMode];
+    const m = levels.length;
+    let levelIndices = [];
+    for (let r = 0; r < Math.ceil(n / m); r++) {
+      for (let k = 0; k < m; k++) levelIndices.push(k);
+    }
+    levelIndices = levelIndices.slice(0, n);
+    shuffleArray(levelIndices);
+
+    for (let i = 0; i < chosen.length; i++) {
+      const phrase = PHRASES[chosen[i]];
+      const lvl = levels[levelIndices[i]];
+      testWords.push({ text: phrase, targetPressure: lvl });
+    }
+  } else {
+    // Fallback: use COMMON_WORDS as before
+    for (let i = 0; i < n; i++) {
+      const w = COMMON_WORDS[Math.floor(Math.random() * COMMON_WORDS.length)];
+      testWords.push({ text: w, targetPressure: getTargetPressure() });
+    }
   }
 
   currentCharIndex = 0;
@@ -345,10 +431,11 @@ function generateTestSequence() {
   keyIsPressed = false;
   maxPressureOnKeyHold = 0;
 
+  // Clear retype mode whenever a new sequence is generated
+  allowRetypeMode = false;
+
   currentTargetPressure = null;
   currentKeyCodeRequired = null;
-
-  skipSpaces();
 
   updateDisplay();
   updateStats();
@@ -431,7 +518,8 @@ resetTestBtn.addEventListener("click", () => {
 // Keyboard listener
 if ("hid" in navigator) {
   document.addEventListener("keydown", (e) => {
-    if (!isTestActive || !kb) return;
+    // Allow handling while test is active OR when in retype mode for final char
+    if (!(isTestActive || allowRetypeMode) || !kb) return;
 
     // prevent browser scroll etc.
     if (e.code === 'Space' || e.key === ' ') e.preventDefault();
@@ -447,7 +535,8 @@ if ("hid" in navigator) {
   });
 
   document.addEventListener("keyup", (e) => {
-    if (!isTestActive || !kb || !keyIsPressed) return;
+    // Allow handling while test is active OR when in retype mode for final char
+    if (!(isTestActive || allowRetypeMode) || !kb || !keyIsPressed) return;
 
     const key = (e.key || '').toLowerCase();
     if (key.length !== 1) return;
@@ -457,14 +546,21 @@ if ("hid" in navigator) {
       const pressureNormalized = maxPressureOnKeyHold / MAX_LEVEL;
 
       const target = currentTargetPressure;
-      if (!target) return; // should never happen for letters
+      let success;
 
-      const success =
-        pressureNormalized >= target.min &&
-        pressureNormalized <= target.max;
+      // If target is null => this is a space or 'Any' => accept any pressure
+      if (!target) {
+        success = true;
+      } else {
+        success =
+          pressureNormalized >= target.min &&
+          pressureNormalized <= target.max;
+      }
 
       recordAttempt(keyCode, pressureNormalized, success);
 
+      // If we're still in active test mode, update the current key info. If we are in
+      // retype mode (test has ended but user can retry final char), keep the display as-is.
       if (isTestActive) updateCurrentKeyInfo();
     }
   });
@@ -473,4 +569,5 @@ if ("hid" in navigator) {
 // =======================
 // Init
 // =======================
-generateTestSequence();
+// Load phrases from word.txt then generate initial sequence. If loading fails, generate using fallback.
+loadPhrases().then(() => generateTestSequence());
