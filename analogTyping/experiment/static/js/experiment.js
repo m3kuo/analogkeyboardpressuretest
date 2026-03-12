@@ -194,7 +194,7 @@ function recordAttempt(keyCode, value) {
         }
         catch (err) { console.log(err) }
 
-        keyElement.style.boxShadow = ret.success ? '0 0 20px #00FF00' : '0 0 20px #FF0000';
+        keyElement.style.boxShadow = ret.success ? '0 0 20px #00FF00' : '0 0 20px #AEB6BF';
         setTimeout(() => {
             keyElement.style.boxShadow = '';
         }, 500);

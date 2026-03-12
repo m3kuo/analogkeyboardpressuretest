@@ -21,12 +21,12 @@ library(ez)
 
 #### Read the csv file and claim the data type
 ```{r}
+ 
+participant_id = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "23", "24", "40")
 
-participant_id = c("0")
+key_code = c("A", "S", "D", "F", "J", "K", "L", "Semicolon")
 
-key_code = c("A", "S", "D", "F", "H", "J", "K", "L")
-
-level_code = c("light", "medium", "mediumLow", "mediumHigh", "full")
+level_code = c("full", "mediumHigh", "mediumLow", "medium", "light")
 
 # Initialize an empty data frame
 trial_log = NULL
@@ -36,7 +36,7 @@ for (x in participant_id) {
   trial_user_log <- read_csv(filename, col_types = cols(
     id = col_factor(levels = participant_id),
     level = col_integer(),
-    block = col_integer(),
+    block = col_factor(levels = c("0", "1", "2", "3", "4", "5")),
     trial = col_integer(),
     levelCounts = col_factor(levels = c("2", "3", "4")),
     targetKey = col_factor(levels = key_code),
@@ -47,7 +47,7 @@ for (x in participant_id) {
     startTime = col_double(),
     endTime = col_double(),
     time = col_double(),
-  )) %>% filter(block != 0)
+  )) %>% filter(block %in% c("1", "2", "3", "4", "5"))
   trial_log = bind_rows(trial_log,trial_user_log)
 }
 
@@ -98,68 +98,74 @@ log_accuracy_summary %>% ggplot(
   aes(
     x = block,
     y = meanAccuracy,
-    ymin = meanAccuracy,
-    ymax = meanAccuracy,
+    ymin = lowCIAccuracy,
+    ymax = highCIAccuracy,
     color = levelCounts
   )
 ) +
   geom_pointrange(position = pd) 
 
-shapiro.test(log_block_accuracy$accuracy_ave)
+m = aov(accuracy_ave ~ block*levelCounts, data=log_block_accuracy) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 
-qqnorm(log_block_accuracy$accuracy_ave); qqline(log_block_accuracy$accuracy_ave, col = 2)
+library(ARTool)
+log_block_accuracy$id = factor(log_block_accuracy$id)
+m = art(accuracy_ave ~ block*levelCounts + (1|id), data=log_block_accuracy) # subjects (S) as random effect
+anova(m)
+
+# art.con(m, "block")
 
 ```
 
-#### word per seoncd - per participant
+No effect on block, no learning effect. Including all trials.
+
+#### levelCount accuracy
 ```{r warning=FALSE}
-
-trial_participant_wpm <-trial_log %>%
-  group_by(pid) %>%
+log_accuracy <- trial_log %>%
+  group_by(id, levelCounts) %>%
   summarize(
-    meanWPM = wpm %>% mean(na.rm=TRUE),
-    lowCIWPM = ci(wpm)[2]%>% pmax(0),
-    highCIWPM = ci(wpm)[3],
-    sdWPM = ci(wpm)[4],
-    stdWPM = wpm %>% sd()) %>%
-  ungroup()
+    accuracy_ave = sum(isSuccessful) / n(),
+    n_trials = n()
+  ) %>%
+  ungroup() %>%
+  arrange(id, levelCounts)
 
-trial_participant_wpm
-
-trial_participant_uwer <-trial_log %>%
-    group_by(pid) %>%
+log_accuracy_summary <- log_accuracy  %>%
+  group_by(levelCounts) %>%
   summarize(
-    meanuwer = uwer %>% mean(na.rm=TRUE),
-    lowCIuwer = ci(uwer)[2]%>% pmax(0),
-    highCIuwer = ci(uwer)[3],
-    sduwer = ci(uwer)[4],
-    stduwer = uwer %>% sd())%>%
-  ungroup()
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(levelCounts)
 
-trial_participant_uwer
+log_accuracy_summary
 
-trial_participant_cwer <-trial_log %>%
-    group_by(pid) %>%
-  summarize(
-    meacuwer = cwer %>% mean(na.rm=TRUE),
-    lowCIcwer = ci(cwer)[2]%>% pmax(0),
-    highCIcwer = ci(cwer)[3],
-    sdcwer = ci(cwer)[4],
-    stdcwer = cwer %>% sd())%>%
-  ungroup()
-
-trial_participant_cwer
+# pd <- position_dodge(width = 0.3)
+# log_accuracy_summary %>% ggplot(
+#   aes(
+#     x = levelCounts,
+#     y = meanAccuracy,
+#     ymin = lowCIAccuracy,
+#     ymax = highCIAccuracy
+#   )
+# ) +
+#   geom_pointrange(position = pd) 
 
 # line + dot
-trial_participant_wpm_graph <- ggplot(trial_participant_wpm) +
-  geom_pointrange( aes(x=pid, y=meanWPM, ymin=lowCIWPM, ymax=highCIWPM), alpha=0.9, size=0.8, colour="#566573") +
-  scale_y_continuous(limits=c(5.0, 30.0))
+accuracy_graph <- ggplot(log_accuracy_summary) +
+  geom_pointrange( aes(x=reorder(levelCounts, desc(levelCounts)), y=meanAccuracy, ymin=lowCIAccuracy, ymax=highCIAccuracy), colour="#28b463", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(1.0,0.3)) + 
+  coord_flip()
 
-trial_participant_wpm_graph
+accuracy_graph
 
-trial_participant_wpm_graph + theme( # remove the vertical grid lines
+accuracy_graph + theme( # remove the vertical grid lines
           panel.background = element_blank(),
-          panel.grid.major.y = element_line( size=.1, color="gray" ),
+          panel.grid.major.y = element_blank() ,
           # explicitly set the horizontal lines (or they will disappear too)
           panel.grid.major.x = element_line( size=.1, color="gray" ),
           axis.title.x = element_blank(),
@@ -170,83 +176,89 @@ trial_participant_wpm_graph + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("wpm participants.pdf", width = 20, height = 10)
+ggsave("accuracy_levels.pdf", width = 4, height = 3)
+
+m = aov(accuracy_ave ~ levelCounts, data=log_accuracy) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+library(ez) # for ezANOVA
+log_accuracy$id = factor(log_accuracy$id)
+m = ezANOVA(dv=accuracy_ave, within=c(levelCounts), wid=id, data=log_accuracy)
+m$Mauchly # p<.05 indicates a sphericity violation
+m$ANOVA # use if no violation
+
+#library(reshape2) # for dcast
+#df2 <- dcast(log_accuracy, id ~ levelCounts, value.var="accuracy_ave") # make wide-format table
+#ab = t.test(df2$"2", df2$"3", paired=TRUE, var.equal=TRUE) # a vs. b
+#ac = t.test(df2$"2", df2$"4", paired=TRUE, var.equal=TRUE) # a vs. c
+#bc = t.test(df2$"3", df2$"4", paired=TRUE, var.equal=TRUE) # b vs. c
+#p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+
+pairwise.t.test(log_accuracy$accuracy_ave, log_accuracy$levelCounts, paired=TRUE, p.adjust="holm")
 
 ```
 
-### Swipe Typing Usage
+2 levels is better than 3 and 4 levels. 
+3 levels is better than 4 levels.
 
-#### participant
 
+#### levelCount time
 ```{r warning=FALSE}
+log_time_filtered <- trial_log %>% 
+  group_by(id) %>% 
+  mutate(IQR = IQR(time),
+            O_upper = quantile(time, probs=c( .75), na.rm = FALSE)+1.5*IQR,  
+            O_lower = quantile(time, probs=c( .25), na.rm = FALSE)-1.5*IQR  
+  ) %>% 
+  filter(O_lower <= time & time <= O_upper)
 
-swipe_usage_participant <-usage_log %>%
-  filter(type == 'swipe')%>%
+log_time <- log_time_filtered %>%
+  group_by(id, levelCounts) %>%
   summarize(
-    meanusage = usage %>% mean(na.rm=TRUE),
-    lowCIusage = ci(usage)[2]%>% pmax(0),
-    highCIusager = ci(usage)[3]%>% pmin(1),
-    sdusage = ci(usage)[4],
-    stdusage = usage %>% sd())
-
-swipe_usage_participant
-
-usage_participant_graph <- ggplot(usage_log, aes(fill=type, y=usage, x=pid, label = percent(usage, 1))) + 
-  geom_bar(position=position_stack(reverse = TRUE), stat="identity", width=0.5) +
-  geom_text(size = 3, position = position_stack(reverse = TRUE, vjust = 0.5)) +
-  scale_fill_discrete(breaks = c('tap', 'swipe')) +
-  scale_fill_manual(values = c('tap' = "#2ECC71", 'swipe' = "#3498DB"))
-
-usage_participant_graph
-
-usage_participant_graph + theme( # remove the vertical grid lines
-          panel.background = element_blank(),
-          panel.grid.major.y = element_line( size=.1, color="gray" ),
-          # explicitly set the horizontal lines (or they will disappear too)
-          panel.grid.major.x = element_blank(),
-          axis.title.x = element_blank(),
-          axis.text.x=element_blank(),
-          axis.ticks.x = element_blank(),
-          axis.title.y = element_blank(),
-          axis.text.y=element_blank(),
-          axis.ticks.y = element_blank()
-    )
-
-ggsave("usage participant.pdf", width = 20, height = 10, limitsize = FALSE)
-
-
-```
-#### char count
-
-```{r warning=FALSE}
-
-word_count <- word_log %>% 
-  group_by(count, usage, .drop = FALSE) %>% count()
-
-word_count_summary <- word_count %>% 
-  group_by(count) %>%
-  summarize(
-    ratio = n / sum(n),
-    n_trials = sum(n),
-    usage = usage,
-    n = n,
+    time_ave = sum(time) / n(),
+    n_trials = n()
   ) %>%
-  ungroup()
+  ungroup() %>%
+  arrange(id, levelCounts)
 
-usage_word_graph <- ggplot(word_count_summary, aes(fill=usage, y=ratio, x=count, label = percent(ratio, 1))) + 
-  geom_bar(position=position_stack(reverse = TRUE), stat="identity", width=0.5) +
-  geom_text(size = 3, position = position_stack(reverse = TRUE, vjust = 0.5)) +
-  scale_fill_discrete(breaks = c('tap', 'swipe')) +
-  scale_fill_manual(values = c('tap' = "#2ECC71", 'swipe' = "#3498DB"))
+log_time_summary <- log_time  %>%
+  group_by(levelCounts) %>%
+  summarize(
+    meanTime = time_ave %>% mean(na.rm=TRUE),
+    lowCITime = ci(time_ave)[2] %>% pmax(0),
+    highCITime = ci(time_ave)[3],
+    sdTime = ci(time_ave)[4],
+    stdTime = sd(time_ave)) %>%
+  ungroup() %>%
+  arrange(levelCounts)
 
-usage_word_graph
+log_time_summary
 
+# pd <- position_dodge(width = 0.3)
+# log_time_summary %>% ggplot(
+#   aes(
+#     x = levelCounts,
+#     y = meanTime,
+#     ymin = lowCITime,
+#     ymax = highCITime
+#   )
+# ) +
+#   geom_pointrange(position = pd) 
 
-usage_word_graph + theme( # remove the vertical grid lines
+# line + dot
+time_graph <- ggplot(log_time_summary) +
+  geom_pointrange( aes(x=reorder(levelCounts, desc(levelCounts)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
+  scale_y_continuous(lim=c(900,1800)) + 
+  coord_flip()
+
+time_graph
+
+time_graph + theme( # remove the vertical grid lines
           panel.background = element_blank(),
-          panel.grid.major.y = element_line( size=.1, color="gray" ),
+          panel.grid.major.y = element_blank() ,
           # explicitly set the horizontal lines (or they will disappear too)
-          panel.grid.major.x = element_blank(),
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
           axis.title.x = element_blank(),
           axis.text.x=element_blank(),
           axis.ticks.x = element_blank(),
@@ -255,116 +267,657 @@ usage_word_graph + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("usage word.pdf", width = 11, height = 10, limitsize = FALSE)
+ggsave("time_levels.pdf", width = 4, height = 3)
 
+m = aov(time_ave ~ levelCounts, data=log_time) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+log_time$id = factor(log_time$id)
+friedman_test(time_ave ~ levelCounts | id, data=log_time, distribution="asymptotic")
+
+library(reshape2) # for dcast
+df2 <- dcast(log_time, id ~ levelCounts, value.var="time_ave") # make wide-format table
+ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+
+
+
+pairwise.t.test(log_time$time_ave, log_time$levelCounts, paired=TRUE, p.adjust="holm")
 
 ```
 
-### word
+2 levels is faster than 3 and 4 levels. 
+3 levels is faster than 4 levels.
+
+
+### 2 level
 
 #### accuracy
 ```{r warning=FALSE}
-
-word_accuracy <- word_log %>% 
-  group_by(count, category, .drop = FALSE) %>% count()
-
-word_accuracy_summary <-word_accuracy %>%
-  group_by(count) %>%
+log_twolevel_accuracy <- trial_log %>%
+  filter(levelCounts == c("2")) %>%
+  group_by(id, targetLevel, targetKey) %>%
   summarize(
-    ratio = n / sum(n),
-    n_trials = sum(n),
-    category = category,
-    n = n,
-    )%>%
+    accuracy_ave = sum(isSuccessful) / n(),
+    n_trials = n()
+  ) %>%
+  ungroup() %>%
+  arrange(id, targetLevel, targetKey)
+
+log_twolevel_accuracy_summary <- log_twolevel_accuracy  %>%
+  group_by(targetLevel, targetKey) %>%
+  summarize(
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel, targetKey)
+
+log_twolevel_accuracy_summary
+
+pd <- position_dodge(width = 0.3)
+log_twolevel_accuracy_summary %>% ggplot(
+  aes(
+    x = targetKey,
+    y = meanAccuracy,
+    ymin = lowCIAccuracy,
+    ymax = highCIAccuracy,
+    color = targetLevel
+  )
+) +
+  geom_pointrange(position = pd) 
+
+m = aov(accuracy_ave ~ targetLevel*targetKey, data=log_twolevel_accuracy) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+library(ARTool)
+log_twolevel_accuracy$id = factor(log_twolevel_accuracy$id) # Subject id must be nominal
+m = art(accuracy_ave ~ targetLevel*targetKey + (1|id), data=log_twolevel_accuracy) # subjects (S) as random effect
+anova(m)
+
+art.con(m, "targetLevel")
+
+log_twolevel_accuracy_summary_level <- log_twolevel_accuracy  %>%
+  group_by(targetLevel) %>%
+  summarize(
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel)
+
+log_twolevel_accuracy_summary_level
+
+# line + dot (levels)
+twolevel_accuracy_level <- ggplot(log_twolevel_accuracy_summary_level) +
+  geom_pointrange( aes(x=reorder(targetLevel, desc(targetLevel)), y=meanAccuracy, ymin=lowCIAccuracy, ymax=highCIAccuracy), colour="#28b463", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(1.0,0.3)) + 
+  coord_flip()
+
+twolevel_accuracy_level
+
+twolevel_accuracy_level + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("accuracy_twolevel_level.pdf", width = 4, height = 2)
+
+log_twolevel_accuracy_summary_key <- log_twolevel_accuracy  %>%
+  group_by(targetKey) %>%
+  summarize(
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(targetKey)
+
+log_twolevel_accuracy_summary_key
+
+# line + dot (key)
+twolevel_accuracy_key <- ggplot(log_twolevel_accuracy_summary_key) +
+  geom_pointrange( aes(x=reorder(targetKey, desc(targetKey)), y=meanAccuracy, ymin=lowCIAccuracy, ymax=highCIAccuracy), colour="#28b463", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(1.0,0.3)) + 
+  coord_flip()
+
+twolevel_accuracy_key
+
+twolevel_accuracy_key + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("accuracy_twolevel_key.pdf", width = 4, height = 8)
+```
+
+Main effect on targetLevel: Full has higher accuracy.
+
+
+
+#### actual press - user threshold
+```{r warning=FALSE}
+log_twolevel <- trial_log %>%
+  filter(levelCounts == c("2"))
+
+log_twolevel_user <- log_twolevel %>% 
+  group_by(id, targetLevel) %>% 
+  mutate(
+    pressRawPercent = pressedRaw * 100.0 / 255.0,
+  ) %>% 
   ungroup()
 
-word_accuracy_summary
-
-word_accuracy_summary_top1 <-word_accuracy_summary %>%
-  filter(category == 'top1') %>%
-  group_by(count) %>%
+log_twolevel_user_quantile <- log_twolevel_user%>%
+  group_by(id, targetLevel) %>%
   summarize(
-    top1_accuracy = sum(ratio),
-    )
+    lower_outlier = boxplot.stats(pressedRaw)$stats[c(1)],
+    lower = boxplot.stats(pressedRaw)$stats[c(2)],
+    median = boxplot.stats(pressedRaw)$stats[c(3)],
+    upper = boxplot.stats(pressedRaw)$stats[c(4)],
+    upper_outlier = boxplot.stats(pressedRaw)$stats[c(5)],
+  ) %>%
+  ungroup() %>%
+  arrange(id, targetLevel)
 
-word_accuracy_summary_top3 <-word_accuracy_summary %>%
-  filter(category == 'top1' | category == 'top3') %>%
-  group_by(count) %>%
-  summarize(
-    top3_accuracy = sum(ratio),
-    )
+library(reshape2) # for dcast
 
-word_accuracy <- left_join(word_accuracy_summary_top1, word_accuracy_summary_top3, by = "count") 
-word_accuracy
+melted_threshold <- melt(log_twolevel_user_quantile, id.vars = c("id", "targetLevel"), measure.vars = c("lower_outlier", "lower", "median", "upper", "upper_outlier"))
+
+#melted_threshold
+
+cast_threshold <- dcast(melted_threshold, id~targetLevel * variable, value.var="value")%>%
+  group_by(id) %>%
+  mutate(
+    full_threshold = median(c(full_lower_outlier, full_lower,light_upper, light_upper_outlier))
+  ) %>%
+  ungroup()
+
+#cast_threshold
+
+log_twolevel_user <- merge(log_twolevel_user, cast_threshold,
+                          by = 'id', all = TRUE)
+
+log_twolevel_user <- log_twolevel_user %>% 
+  mutate(
+    pressLevel_user = ifelse(pressedRaw >= full_threshold, "full", "light"),
+    isSuccessful_user = (targetLevel == pressLevel_user)
+  )
+
+#log_twolevel_user
+
+
+log_twolevel_user %>% ggplot(
+  aes(
+    x = targetLevel,
+    y = pressRawPercent
+  )
+) + 
+  geom_violin() + 
+  geom_boxplot(width = 0.03, outlier.shape = 1, , outlier.alpha = 0.3)
 
 ```
 
-#### accuracy - with swipe
+##### confusion table
+```{r warning=FALSE}
+library(cvms)
+conf_mat <- confusion_matrix(targets = log_twolevel_user$targetLevel,
+                             predictions = log_twolevel_user$pressedLevel)
+
+conf_mat
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
+  add_normalized = FALSE,
+  add_row_percentages = FALSE)
+
+conf_mat <- confusion_matrix(targets = log_twolevel_user$targetLevel,
+                             predictions = log_twolevel_user$pressLevel_user)
+
+conf_mat
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
+  add_normalized = FALSE,
+  add_row_percentages = FALSE)
+
+```
+
+
+#### time
+```{r warning=FALSE}
+log_twoLevel_time <- log_time_filtered%>%
+  filter(levelCounts == c("2")) %>%
+  group_by(id, targetLevel, targetKey) %>%
+  summarize(
+    time_ave = sum(time) / n(),
+    n_trials = n()
+  ) %>%
+  ungroup() %>%
+  arrange(id, targetLevel, targetKey)
+
+log_twoLevel_time_summary <- log_twoLevel_time  %>%
+  group_by(targetLevel, targetKey) %>%
+  summarize(
+    meanTime = time_ave %>% mean(na.rm=TRUE),
+    lowCITime = ci(time_ave)[2] %>% pmax(0),
+    highCITime = ci(time_ave)[3],
+    sdTime = ci(time_ave)[4],
+    stdTime = sd(time_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel, targetKey)
+
+log_twoLevel_time_summary
+
+pd <- position_dodge(width = 0.3)
+log_twoLevel_time_summary %>% ggplot(
+  aes(
+    x = targetKey,
+    y = meanTime,
+    ymin = lowCITime,
+    ymax = highCITime,
+    color = targetLevel
+  )
+) +
+  geom_pointrange(position = pd) 
+
+m = aov(time_ave ~ targetLevel*targetKey, data=log_twoLevel_time) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+library(ARTool)
+log_twoLevel_time$id = factor(log_twoLevel_time$id) # Subject id must be nominal
+m = art(time_ave ~ targetLevel*targetKey + (1|id), data=log_twoLevel_time) # subjects (S) as random effect
+anova(m)
+
+#art.con(m, "targetLevel")
+art.con(m, "targetKey")
+
+
+log_twoLevel_time_summary_level <- log_twoLevel_time  %>%
+  group_by(targetLevel) %>%
+  summarize(
+    meanTime = time_ave %>% mean(na.rm=TRUE),
+    lowCITime = ci(time_ave)[2] %>% pmax(0),
+    highCITime = ci(time_ave)[3],
+    sdTime = ci(time_ave)[4],
+    stdTime = sd(time_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel)
+
+log_twoLevel_time_summary_level
+
+# line + dot (levels)
+twolevel_time_level <- ggplot(log_twoLevel_time_summary_level) +
+  geom_pointrange( aes(x=reorder(targetLevel, desc(targetLevel)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
+  scale_y_continuous(lim=c(900,1800)) + 
+  coord_flip()
+
+twolevel_time_level
+
+twolevel_time_level + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("time_twolevel_level.pdf", width = 4, height = 2)
+
+log_twoLevel_time_summary_key <- log_twoLevel_time  %>%
+  group_by(targetKey) %>%
+  summarize(
+    meanTime = time_ave %>% mean(na.rm=TRUE),
+    lowCITime = ci(time_ave)[2] %>% pmax(0),
+    highCITime = ci(time_ave)[3],
+    sdTime = ci(time_ave)[4],
+    stdTime = sd(time_ave)) %>%
+  ungroup() %>%
+  arrange(targetKey)
+
+log_twoLevel_time_summary_key
+
+# line + dot (key)
+twolevel_time_key <- ggplot(log_twoLevel_time_summary_key) +
+  geom_pointrange( aes(x=reorder(targetKey, desc(targetKey)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
+  scale_y_continuous(lim=c(900,1800)) + 
+  coord_flip()
+
+twolevel_time_key
+
+twolevel_time_key + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("time_twolevel_key.pdf", width = 4, height = 8)
+```
+
+Main effect on keys: "TODO"
+
+### 3 level
+
+#### accuracy
+```{r warning=FALSE}
+log_threelevel_accuracy <- trial_log %>%
+  filter(levelCounts == c("3")) %>%
+  group_by(id, targetLevel, targetKey) %>%
+  summarize(
+    accuracy_ave = sum(isSuccessful) / n(),
+    n_trials = n()
+  ) %>%
+  ungroup() %>%
+  arrange(id, targetLevel, targetKey)
+
+log_threelevel_accuracy_summary <- log_threelevel_accuracy  %>%
+  group_by(targetLevel, targetKey) %>%
+  summarize(
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel, targetKey)
+
+log_threelevel_accuracy_summary
+
+pd <- position_dodge(width = 0.3)
+log_threelevel_accuracy_summary %>% ggplot(
+  aes(
+    x = targetKey,
+    y = meanAccuracy,
+    ymin = lowCIAccuracy,
+    ymax = highCIAccuracy,
+    color = targetLevel
+  )
+) +
+  geom_pointrange(position = pd) 
+
+m = aov(accuracy_ave ~ targetLevel*targetKey, data=log_threelevel_accuracy) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+library(ARTool)
+log_threelevel_accuracy$id = factor(log_threelevel_accuracy$id) # Subject id must be nominal
+m = art(accuracy_ave ~ targetLevel*targetKey + (1|id), data=log_threelevel_accuracy) # subjects (S) as random effect
+anova(m)
+
+art.con(m, "targetLevel")
+art.con(m, "targetKey")
+# art.con(m, "targetLevel:targetKey")
+
+log_threelevel_accuracy_summary_level <- log_threelevel_accuracy  %>%
+  group_by(targetLevel) %>%
+  summarize(
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel)
+
+log_threelevel_accuracy_summary_level
+
+# line + dot (levels)
+threelevel_accuracy_level <- ggplot(log_threelevel_accuracy_summary_level) +
+  geom_pointrange( aes(x=reorder(targetLevel, desc(targetLevel)), y=meanAccuracy, ymin=lowCIAccuracy, ymax=highCIAccuracy), colour="#28b463", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(1.0,0.3)) + 
+  coord_flip()
+
+threelevel_accuracy_level
+
+threelevel_accuracy_level + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("accuracy_threelevel_level.pdf", width = 4, height = 3)
+
+log_threelevel_accuracy_summary_key <- log_threelevel_accuracy  %>%
+  group_by(targetKey) %>%
+  summarize(
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(targetKey)
+
+log_threelevel_accuracy_summary_key
+
+# line + dot (key)
+threelevel_accuracy_key <- ggplot(log_threelevel_accuracy_summary_key) +
+  geom_pointrange( aes(x=reorder(targetKey, desc(targetKey)), y=meanAccuracy, ymin=lowCIAccuracy, ymax=highCIAccuracy), colour="#28b463", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(1.0,0.3)) + 
+  coord_flip()
+
+threelevel_accuracy_key
+
+threelevel_accuracy_key + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("accuracy_threelevel_key.pdf", width = 4, height = 8)
+```
+
+Main effect on targetLevel: Full has higher accuracy then medium and light; Medium has higher accuracy then light.
+Main effect on targetKey: J has higher accuracy than A, S, D, F, L, Semicolon
+Interaction: "TODO"
+
+#### actual press - user threshold
 ```{r warning=FALSE}
 
-word_swipe_accuracy <- word_log %>% 
-  filter(swipe_key_count != 0) %>%
-  group_by(count, category, .drop = FALSE) %>% count()
+log_threelevel <- trial_log %>%
+  filter(levelCounts == c("3"))
 
-word_swipe_accuracy_summary <-word_swipe_accuracy %>%
-  group_by(count) %>%
-  summarize(
-    ratio = n / sum(n),
-    n_trials = sum(n),
-    category = category,
-    n = n,
-    )%>%
+log_threelevel_user <- log_threelevel %>% 
+  group_by(id, targetLevel) %>% 
+  mutate(
+    pressRawPercent = pressedRaw * 100.0 / 255.0,
+  ) %>% 
   ungroup()
 
-word_swipe_accuracy_summary
-
-word_swipe_accuracy_summary_top1 <-word_swipe_accuracy_summary %>%
-  filter(category == 'top1') %>%
-  group_by(count) %>%
+log_threelevel_user_quantile <- log_threelevel_user%>%
+  group_by(id, targetLevel) %>%
   summarize(
-    top1_accuracy = sum(ratio),
-    n = n_trials,
-    )
+    lower_outlier = boxplot.stats(pressedRaw)$stats[c(1)],
+    lower = boxplot.stats(pressedRaw)$stats[c(2)],
+    median = boxplot.stats(pressedRaw)$stats[c(3)],
+    upper = boxplot.stats(pressedRaw)$stats[c(4)],
+    upper_outlier = boxplot.stats(pressedRaw)$stats[c(5)],
+  ) %>%
+  ungroup() %>%
+  arrange(id, targetLevel)
 
-word_swipe_accuracy_summary_top3 <-word_swipe_accuracy_summary %>%
-  filter(category == 'top1' | category == 'top3') %>%
-  group_by(count) %>%
-  summarize(
-    top3_accuracy = sum(ratio),
-    )
+library(reshape2) # for dcast
 
-word_swipe_accuracy <- left_join(word_swipe_accuracy_summary_top1, word_swipe_accuracy_summary_top3, by = "count") 
-word_swipe_accuracy
+melted_threshold <- melt(log_threelevel_user_quantile, id.vars = c("id", "targetLevel"), measure.vars = c("lower_outlier", "lower", "median", "upper", "upper_outlier"))
+cast_threshold <- dcast(melted_threshold, id~targetLevel * variable, value.var="value") %>% 
+  group_by(id) %>%
+  mutate(
+    full_threshold =  median(c(full_lower_outlier, full_lower,medium_upper, medium_upper_outlier)),
+    medium_threshold =  median(c(medium_lower_outlier, medium_lower,light_upper, light_upper_outlier)),
+  ) %>%
+  ungroup()
+
+log_threelevel_user <- merge(log_threelevel_user, cast_threshold,
+                          by = 'id', all = TRUE)
+
+log_threelevel_user <- log_threelevel_user %>% 
+  mutate(
+    pressLevel_user = ifelse(pressedRaw >= full_threshold, "full", ifelse(pressedRaw >= medium_threshold, "medium", "light")),
+    isSuccessful_user = (targetLevel == pressLevel_user)
+  )
+
+
+log_threelevel_user %>% ggplot(
+  aes(
+    x = targetLevel,
+    y = pressRawPercent
+  )
+) + 
+  geom_violin() + 
+  geom_boxplot(width = 0.03, outlier.shape = 1, , outlier.alpha = 0.3)
+
+```
+
+
+##### confusion table
+```{r warning=FALSE}
+library(cvms)
+conf_mat <- confusion_matrix(targets = log_threelevel_user$targetLevel,
+                             predictions = log_threelevel_user$pressedLevel)
+
+conf_mat
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
+  add_normalized = FALSE,
+  add_row_percentages = FALSE,
+  class_order = c("full", "medium", "light"))
+
+conf_mat <- confusion_matrix(targets = log_threelevel_user$targetLevel,
+                             predictions = log_threelevel_user$pressLevel_user)
+
+conf_mat
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
+  add_normalized = FALSE,
+  add_row_percentages = FALSE,
+  class_order = c("full", "medium", "light"))
 
 ```
 
 #### time
 ```{r warning=FALSE}
-
-word_time_summary <-word_log %>%
-  filter(category == 'top1' | category == 'top3' | is_match) %>%
-  group_by(count, usage) %>%
+log_threeLevel_time <- log_time_filtered%>%
+  filter(levelCounts == c("3")) %>%
+  group_by(id, targetLevel, targetKey) %>%
   summarize(
-    meanTime = time %>% mean(na.rm=TRUE),
-    lowCITime = ci(time)[2]%>% pmax(0),
-    highCITime = ci(time)[3],
-    sdTime = ci(time)[4],
-    stdTime = time %>% sd()) %>%
-  ungroup()
+    time_ave = sum(time) / n(),
+    n_trials = n()
+  ) %>%
+  ungroup() %>%
+  arrange(id, targetLevel, targetKey)
 
-word_time_summary
+log_threeLevel_time_summary <- log_threeLevel_time  %>%
+  group_by(targetLevel, targetKey) %>%
+  summarize(
+    meanTime = time_ave %>% mean(na.rm=TRUE),
+    lowCITime = ci(time_ave)[2] %>% pmax(0),
+    highCITime = ci(time_ave)[3],
+    sdTime = ci(time_ave)[4],
+    stdTime = sd(time_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel, targetKey)
 
-# line + dot
-word_time_graph <- ggplot(word_time_summary) +
-  geom_pointrange( aes(x=count, y=meanTime, ymin=lowCITime, ymax=highCITime,color=reorder(usage, desc(usage))), alpha=0.9, size=0.8, position=position_dodge(width=1.0)) +
-  scale_y_continuous(limits=c(0.0,10.0), breaks = seq(0, 10.0, by = 2)) +
-  scale_colour_manual(values = c("swipe" = "#3498DB", "tap" = "#2ECC71"))
+log_threeLevel_time_summary
 
-word_time_graph
+pd <- position_dodge(width = 0.3)
+log_threeLevel_time_summary %>% ggplot(
+  aes(
+    x = targetKey,
+    y = meanTime,
+    ymin = lowCITime,
+    ymax = highCITime,
+    color = targetLevel
+  )
+) +
+  geom_pointrange(position = pd) 
 
-word_time_graph + theme( # remove the vertical grid lines
+m = aov(time_ave ~ targetLevel*targetKey, data=log_threeLevel_time) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+library(ARTool)
+log_threeLevel_time$id = factor(log_threeLevel_time$id) # Subject id must be nominal
+m = art(time_ave ~ targetLevel*targetKey + (1|id), data=log_threeLevel_time) # subjects (S) as random effect
+anova(m)
+
+art.con(m, "targetLevel")
+art.con(m, "targetKey")
+
+log_threeLevel_time_summary_level <- log_threeLevel_time  %>%
+  group_by(targetLevel) %>%
+  summarize(
+    meanTime = time_ave %>% mean(na.rm=TRUE),
+    lowCITime = ci(time_ave)[2] %>% pmax(0),
+    highCITime = ci(time_ave)[3],
+    sdTime = ci(time_ave)[4],
+    stdTime = sd(time_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel)
+
+log_threeLevel_time_summary_level
+
+# line + dot (levels)
+threelevel_time_level <- ggplot(log_threeLevel_time_summary_level) +
+  geom_pointrange( aes(x=reorder(targetLevel, desc(targetLevel)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
+  scale_y_continuous(lim=c(900,1800)) + 
+  coord_flip()
+
+threelevel_time_level
+
+threelevel_time_level + theme( # remove the vertical grid lines
           panel.background = element_blank(),
-          panel.grid.major.y = element_line( size=.1, color="gray" ),
+          panel.grid.major.y = element_blank() ,
           # explicitly set the horizontal lines (or they will disappear too)
           panel.grid.major.x = element_line( size=.1, color="gray" ),
           axis.title.x = element_blank(),
@@ -375,124 +928,452 @@ word_time_graph + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("time usage count.pdf", width = 11, height = 10)
+ggsave("time_threelevel_level.pdf", width = 4, height = 3)
+
+
+log_threeLevel_time_summary_key <- log_threeLevel_time  %>%
+  group_by(targetKey) %>%
+  summarize(
+    meanTime = time_ave %>% mean(na.rm=TRUE),
+    lowCITime = ci(time_ave)[2] %>% pmax(0),
+    highCITime = ci(time_ave)[3],
+    sdTime = ci(time_ave)[4],
+    stdTime = sd(time_ave)) %>%
+  ungroup() %>%
+  arrange(targetKey)
+
+log_threeLevel_time_summary_key
+
+# line + dot (key)
+threelevel_time_key <- ggplot(log_threeLevel_time_summary_key) +
+  geom_pointrange( aes(x=reorder(targetKey, desc(targetKey)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
+  scale_y_continuous(lim=c(900,1800)) + 
+  coord_flip()
+
+threelevel_time_key
+
+threelevel_time_key + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("time_threelevel_key.pdf", width = 4, height = 8)
 ```
 
-#### within swipe
-##### swipe-tap ratio (key count)
+Main effect on targetLevel: full and light is faster than medium
+Main effect on targetKey: (AS) faster than (DFJKL;), (DF;) faster than (KL), J faster than K
+
+### 4 level
+
+#### accuracy
 ```{r warning=FALSE}
-
-word_swipe <-word_log %>%
-  filter(usage == 'swipe') %>%
-  filter(category == 'top1' | category == 'top3') %>%
-  filter(is_match)
-
-word_swipe_ratio_summary <-word_swipe %>%
-  group_by(count) %>%
+log_fourlevel_accuracy <- trial_log %>%
+  filter(levelCounts == c("4")) %>%
+  group_by(id, targetLevel, targetKey) %>%
   summarize(
-    meanRatio = swipe_ratio %>% mean(na.rm=TRUE),
-    lowCIRatio = ci(swipe_ratio)[2]%>% pmax(0),
-    highCIRatio = ci(swipe_ratio)[3]%>% pmin(1),
-    sdRatio = ci(swipe_ratio)[4],
-    stdRatio = swipe_ratio %>% sd()) %>%
+    accuracy_ave = sum(isSuccessful) / n(),
+    n_trials = n()
+  ) %>%
+  ungroup() %>%
+  arrange(id, targetLevel, targetKey)
+
+log_fourlevel_accuracy_summary <- log_fourlevel_accuracy  %>%
+  group_by(targetLevel, targetKey) %>%
+  summarize(
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel, targetKey)
+
+log_fourlevel_accuracy_summary
+
+pd <- position_dodge(width = 0.3)
+log_fourlevel_accuracy_summary %>% ggplot(
+  aes(
+    x = targetKey,
+    y = meanAccuracy,
+    ymin = lowCIAccuracy,
+    ymax = highCIAccuracy,
+    color = targetLevel
+  )
+) +
+  geom_pointrange(position = pd) 
+
+m = aov(accuracy_ave ~ targetLevel*targetKey, data=log_fourlevel_accuracy) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+library(ARTool)
+log_fourlevel_accuracy$id = factor(log_fourlevel_accuracy$id) # Subject id must be nominal
+m = art(accuracy_ave ~ targetLevel*targetKey + (1|id), data=log_fourlevel_accuracy) # subjects (S) as random effect
+anova(m)
+
+art.con(m, "targetLevel")
+art.con(m, "targetKey")
+
+log_fourlevel_accuracy_summary_level <- log_fourlevel_accuracy  %>%
+  group_by(targetLevel) %>%
+  summarize(
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel)
+
+log_fourlevel_accuracy_summary_level
+
+# line + dot (levels)
+fourlevel_accuracy_level <- ggplot(log_fourlevel_accuracy_summary_level) +
+  geom_pointrange( aes(x=reorder(targetLevel, desc(targetLevel)), y=meanAccuracy, ymin=lowCIAccuracy, ymax=highCIAccuracy), colour="#28b463", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(1.0,0.3)) + 
+  coord_flip()
+
+fourlevel_accuracy_level
+
+fourlevel_accuracy_level + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("accuracy_fourlevel_level.pdf", width = 4, height = 4)
+
+log_fourlevel_accuracy_summary_key <- log_fourlevel_accuracy  %>%
+  group_by(targetKey) %>%
+  summarize(
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(targetKey)
+
+log_fourlevel_accuracy_summary_key
+
+# line + dot (key)
+fourlevel_accuracy_key <- ggplot(log_fourlevel_accuracy_summary_key) +
+  geom_pointrange( aes(x=reorder(targetKey, desc(targetKey)), y=meanAccuracy, ymin=lowCIAccuracy, ymax=highCIAccuracy), colour="#28b463", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(1.0,0.3)) + 
+  coord_flip()
+
+fourlevel_accuracy_key
+
+fourlevel_accuracy_key + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("accuracy_fourlevel_key.pdf", width = 4, height = 8)
+
+```
+
+Main effect on targetLevel: Full has highest accuracy; MediumHigh has lowest accuracy; Light higher than MediumLow
+Main effect on targetKey: J higher than ASDKL, F higher than L
+
+
+#### actual press - user threshold
+```{r warning=FALSE}
+log_fourlevel <- trial_log %>%
+  filter(levelCounts == c("4"))
+
+log_fourlevel_user <- log_fourlevel %>% 
+  group_by(id, targetLevel) %>% 
+  mutate(
+    pressRawPercent = pressedRaw * 100.0 / 255.0,
+  ) %>% 
   ungroup()
 
-word_swipe_ratio_summary
-
-
-word_swipe_key_summary <-word_swipe %>%
-  group_by(count) %>%
+log_fourlevel_user_quantile <- log_fourlevel_user%>%
+  group_by(id, targetLevel) %>%
   summarize(
-    meanRatio = swipe_key_count %>% mean(na.rm=TRUE),
-    lowCIRatio = ci(swipe_key_count)[2]%>% pmax(0),
-    highCIRatio = ci(swipe_key_count)[3],
-    sdRatio = ci(swipe_key_count)[4],
-    stdRatio = swipe_key_count %>% sd()) %>%
+    lower_outlier = boxplot.stats(pressedRaw)$stats[c(1)],
+    lower = boxplot.stats(pressedRaw)$stats[c(2)],
+    median = boxplot.stats(pressedRaw)$stats[c(3)],
+    upper = boxplot.stats(pressedRaw)$stats[c(4)],
+    upper_outlier = boxplot.stats(pressedRaw)$stats[c(5)],
+  ) %>%
+  ungroup() %>%
+  arrange(id, targetLevel)
+
+library(reshape2) # for dcast
+
+melted_threshold <- melt(log_fourlevel_user_quantile, id.vars = c("id", "targetLevel"), measure.vars = c("lower_outlier", "lower", "median", "upper", "upper_outlier"))
+cast_threshold <- dcast(melted_threshold, id~targetLevel * variable, value.var="value") %>% 
+  group_by(id) %>%
+  mutate(
+    full_threshold =  median(c(full_lower_outlier, full_lower,mediumHigh_upper, mediumHigh_upper_outlier)),
+    mediumHigh_threshold =  median(c(mediumHigh_lower_outlier, mediumHigh_lower,mediumLow_upper, mediumLow_upper_outlier)),
+    mediumLow_threshold =  median(c(mediumLow_lower_outlier, mediumLow_lower,light_upper, light_upper_outlier)),
+  ) %>%
   ungroup()
 
-word_swipe_key_summary
+log_fourlevel_user <- merge(log_fourlevel_user, cast_threshold,
+                          by = 'id', all = TRUE)
+
+log_fourlevel_user <- log_fourlevel_user %>% 
+  mutate(
+    pressLevel_user = ifelse(pressedRaw >= full_threshold, "full", ifelse(pressedRaw >= mediumHigh_threshold, "mediumHigh", ifelse(pressedRaw >= mediumLow_threshold, "mediumLow", "light"))),
+    isSuccessful_user = (targetLevel == pressLevel_user)
+  )
+
+
+log_fourlevel_user %>% ggplot(
+  aes(
+    x = targetLevel,
+    y = pressRawPercent
+  )
+) + 
+  geom_violin() + 
+  geom_boxplot(width = 0.03, outlier.shape = 1, , outlier.alpha = 0.3)
+
 ```
 
-##### swipe distance
 
+##### confusion table
+```{r warning=FALSE}
+library(cvms)
+conf_mat <- confusion_matrix(targets = log_fourlevel_user$targetLevel,
+                             predictions = log_fourlevel_user$pressedLevel)
+
+conf_mat
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
+  add_normalized = FALSE,
+  add_row_percentages = FALSE,
+  class_order = c("full", "mediumHigh", "mediumLow", "light"))
+
+conf_mat <- confusion_matrix(targets = log_fourlevel_user$targetLevel,
+                             predictions = log_fourlevel_user$pressLevel_user)
+
+conf_mat
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
+  add_normalized = FALSE,
+  add_row_percentages = FALSE,
+  class_order = c("full", "mediumHigh", "mediumLow", "light"))
+
+
+```
+
+#### time
+```{r warning=FALSE}
+log_fourLevel_time <- log_time_filtered%>%
+  filter(levelCounts == c("4")) %>%
+  group_by(id, targetLevel, targetKey) %>%
+  summarize(
+    time_ave = sum(time) / n(),
+    n_trials = n()
+  ) %>%
+  ungroup() %>%
+  arrange(id, targetLevel, targetKey)
+
+log_fourLevel_time_summary <- log_fourLevel_time  %>%
+  group_by(targetLevel, targetKey) %>%
+  summarize(
+    meanTime = time_ave %>% mean(na.rm=TRUE),
+    lowCITime = ci(time_ave)[2] %>% pmax(0),
+    highCITime = ci(time_ave)[3],
+    sdTime = ci(time_ave)[4],
+    stdTime = sd(time_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel, targetKey)
+
+log_fourLevel_time_summary
+
+pd <- position_dodge(width = 0.3)
+log_fourLevel_time_summary %>% ggplot(
+  aes(
+    x = targetKey,
+    y = meanTime,
+    ymin = lowCITime,
+    ymax = highCITime,
+    color = targetLevel
+  )
+) +
+  geom_pointrange(position = pd) 
+
+m = aov(time_ave ~ targetLevel*targetKey, data=log_fourLevel_time) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+library(ARTool)
+log_fourLevel_time$id = factor(log_fourLevel_time$id) # Subject id must be nominal
+m = art(time_ave ~ targetLevel*targetKey + (1|id), data=log_fourLevel_time) # subjects (S) as random effect
+anova(m)
+
+art.con(m, "targetLevel")
+art.con(m, "targetKey")
+
+log_fourLevel_time_summary_level <- log_fourLevel_time  %>%
+  group_by(targetLevel) %>%
+  summarize(
+    meanTime = time_ave %>% mean(na.rm=TRUE),
+    lowCITime = ci(time_ave)[2] %>% pmax(0),
+    highCITime = ci(time_ave)[3],
+    sdTime = ci(time_ave)[4],
+    stdTime = sd(time_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel)
+
+log_fourLevel_time_summary_level
+
+# line + dot (levels)
+fourlevel_time_level <- ggplot(log_fourLevel_time_summary_level) +
+  geom_pointrange( aes(x=reorder(targetLevel, desc(targetLevel)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
+  scale_y_continuous(lim=c(900,1800)) + 
+  coord_flip()
+
+fourlevel_time_level
+
+fourlevel_time_level + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("time_fourlevel_level.pdf", width = 4, height = 4)
+
+
+log_fourLevel_time_summary_key <- log_fourLevel_time  %>%
+  group_by(targetKey) %>%
+  summarize(
+    meanTime = time_ave %>% mean(na.rm=TRUE),
+    lowCITime = ci(time_ave)[2] %>% pmax(0),
+    highCITime = ci(time_ave)[3],
+    sdTime = ci(time_ave)[4],
+    stdTime = sd(time_ave)) %>%
+  ungroup() %>%
+  arrange(targetKey)
+
+log_fourLevel_time_summary_key
+
+# line + dot (key)
+fourlevel_time_key <- ggplot(log_fourLevel_time_summary_key) +
+  geom_pointrange( aes(x=reorder(targetKey, desc(targetKey)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
+  scale_y_continuous(lim=c(900,1800)) + 
+  coord_flip()
+
+fourlevel_time_key
+
+fourlevel_time_key + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("time_fourlevel_key.pdf", width = 4, height = 8)
+```
+
+Main effect on targetLevel: (full, light) faster than (mediumHigh, mediumLow), mediumLow faster than mediumHigh
+Main effect on targetKey: (AS) faster than (DFJKL;), (F;) faster than (KL), D faster than L
+
+
+### Accuracy levelcount - user
 ```{r warning=FALSE}
 
+log_fourlevel_user_accuracy <- log_fourlevel_user %>%
+  dplyr::select(id:isSuccessful, pressLevel_user, isSuccessful_user)
 
-swipe_dist <- swipe_log %>%
+log_threelevel_user_accuracy <- log_threelevel_user %>%
+  dplyr::select(id:isSuccessful, pressLevel_user, isSuccessful_user)
+
+log_twolevel_user_accuracy <- log_twolevel_user %>%
+  dplyr::select(id:isSuccessful, pressLevel_user, isSuccessful_user)
+
+log_user = bind_rows(log_twolevel_user_accuracy,log_threelevel_user_accuracy, log_fourlevel_user_accuracy)
+
+log_defult_accuracy <- log_user %>%
+  group_by(id, levelCounts) %>%
   summarize(
-    meanDist = distance %>% mean(na.rm=TRUE),
-    lowCIDist = ci(distance)[2]%>% pmax(0),
-    highCIDist = ci(distance)[3],
-    sdDist = ci(distance)[4],
-    stdDist = distance %>% sd())
-
-swipe_dist
-
-swipe_target_dist <- swipe_log %>%
+    accuracy_ave = sum(isSuccessful) / n(),
+    n_trials = n()
+  ) %>%
+  mutate(
+    method = "default"
+  ) %>%
+  ungroup() %>%
+  arrange(id, levelCounts)
+  
+log_user_accuracy <- log_user %>%
+  group_by(id, levelCounts) %>%
   summarize(
-    meanDist = target_distance %>% mean(na.rm=TRUE),
-    lowCIDist = ci(target_distance)[2]%>% pmax(0),
-    highCIDist = ci(target_distance)[3],
-    sdDist = ci(target_distance)[4],
-    stdDist = target_distance %>% sd())
+    accuracy_ave = sum(isSuccessful_user) / n(),
+    n_trials = n()
+  ) %>%
+  mutate(
+    method = "user"
+  ) %>%
+  ungroup() %>%
+  arrange(id, levelCounts)
+  
+log_accuracy = bind_rows(log_defult_accuracy, log_user_accuracy)
 
-swipe_target_dist
 
-swipe_bin_count <- swipe_log %>% 
-  group_by(target_dist_bin) %>% count()
-swipe_bin_count
-
-swipe_dist_bin <- swipe_log %>%
-  group_by(target_dist_bin) %>%
+log_accuracy_summary <- log_accuracy  %>%
+  group_by(levelCounts, method) %>%
   summarize(
-    meanDist = distance %>% mean(na.rm=TRUE),
-    lowCIDist = ci(distance)[2]%>% pmax(0),
-    highCIDist = ci(distance)[3],
-    sdDist = ci(distance)[4],
-    stdDist = distance %>% sd()) %>%
-  ungroup()
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(method, levelCounts)
 
-swipe_dist_bin
+log_accuracy_summary
 
-swipe_target_dist_bin <- swipe_log %>%
-  group_by(target_dist_bin) %>%
-  summarize(
-    meanTDist = target_distance %>% mean(na.rm=TRUE),
-    lowCITDist = ci(target_distance)[2]%>% pmax(0),
-    highCITDist = ci(target_distance)[3],
-    sdTDist = ci(target_distance)[4],
-    stdTDist = target_distance %>% sd())%>%
-  ungroup()
-
-swipe_target_dist_bin
-
-swipe_target_dist_res <- swipe_bin_count %>%
-  left_join(swipe_dist_bin) %>%
-  left_join(swipe_target_dist_bin) %>%
-  select(target_dist_bin, n, meanDist, meanTDist)
-
-swipe_target_dist_res
-
+pd <- position_dodge(width = 0.3)
+log_accuracy_summary %>% ggplot(
+  aes(
+    x = levelCounts,
+    y = meanAccuracy,
+    ymin = lowCIAccuracy,
+    ymax = highCIAccuracy,
+    color = method
+  )
+) +
+  geom_pointrange(position = pd) 
 ```
-
-
-##### swipe pair count
-```{r warning=FALSE}
-
-swipe_pair_count <- swipe_log %>% 
-  group_by(pair, .drop = FALSE) %>% count()
-
-```
-
-##### swipe finger
-```{r warning=FALSE}
-
-participant_id = c("3", "4", "6", "15", "16", "22", "23")
-
-swipe_finger <- swipe_log %>% 
-  filter(pid %in% participant_id)%>% 
-  group_by(finger, pair, .drop = FALSE) %>% count()
-
-write.csv(swipe_finger,"logs/swipe_finger_count.csv", row.names = TRUE)
-```
-
