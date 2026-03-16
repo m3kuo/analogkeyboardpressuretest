@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Analog Pressure Editor</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Hall Effect Keyboard Text Editor</h1>
+    <div class="controls">
+      <button id="connectBtn">Connect Keyboard</button>
+      <span id="status">Not connected</span>
+    </div>
+  </header>
+
+  <main>
+    <div id="toolbar">
+      <label id="pressureLabel">Pressure: <span id="pressureValue">0</span></label>
+    </div>
+
+    <div id="editor" contenteditable="true" spellcheck="false" aria-label="Document editor">
+      Start typing... (Use your analog keyboard to change formatting by press force)
+    </div>
+
+    <p class="note">Behavior: Full press = normal, Medium press = bold, Light press = italics. If no analog device is connected, the app still works but will use the last known pressure.</p>
+  </main>
+
+  <!-- app.js imports the wooting helper module directly -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>
