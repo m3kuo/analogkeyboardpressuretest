@@ -7,34 +7,6 @@ let peakRawPressure = 0;         // highest raw pressure seen during current pre
 let peakPressure = 0;            // highest percent seen during current press
 let connectedKeyboards = [];
 
-// Tune this: how long to wait after keydown so analog pressure can settle
-const PRESSURE_SETTLE_MS = 35;
-
-// DOM elements
-const pressureValueEl = document.getElementById('pressureValue');
-const statusEl = document.getElementById('status');
-const connectBtn = document.getElementById('connectBtn');
-const editor = document.getElementById('editor');
-
-const btnNormal = document.getElementById('btnNormal');
-const btnBold = document.getElementById('btnBold');
-const btnItalic = document.getElementById('btnItalic');
-
-// Thresholds (percent)
-// 0%          => normal
-// 1-34%       => italic
-// 35-97%      => bold
-// 98-100%     => normal
-const LIGHT_THRESHOLD = 35;
-const FULL_THRESHOLD = 98;
-
-// Update displayed/latest pressure and keep track of peak pressure
-function setPressure(rawValue) {
-  rawPressure = Number(rawValue) || 0;
-  rawPressure = Math.max(0, Math.min(255, rawPressure));
-
-  currentPressure = Math.round((rawPressure / 255) * 100);
-
   // Track the highest pressure reached during this press
   if (rawPressure > peakRawPressure) {
     peakRawPressure = rawPressure;
