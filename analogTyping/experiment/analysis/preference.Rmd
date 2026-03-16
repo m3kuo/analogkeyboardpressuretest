@@ -1,0 +1,1111 @@
+---
+title: "exp preference"
+author: "Allen Yeh"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```
+```
+
+```{r warning=FALSE}
+library(tidyverse)
+library(gmodels)
+library(rstatix)
+library(ggplot2)
+library(ez)
+library(ARTool)
+library(emmeans)
+```
+
+### Import data
+
+#### Read the csv file and claim the data type
+```{r}
+
+key_code = c("A", "S", "D", "F", "J", "K", "L", "Semicolon")
+
+two_level_code = c("full", "light")
+three_level_code = c("full", "medium", "light")
+four_level_code = c("full", "mediumHigh", "mediumLow", "light")
+
+level2_data <- read_csv("./../results/rating/2_levels.csv", col_types = cols(
+  ID = col_integer(), 
+  Mental_Demand = col_integer(),
+  Physical_Demand = col_integer(),
+  Temporal_Demand = col_integer(), 
+  Performance = col_integer(), 
+  Effort = col_integer(), 
+  Frustration = col_integer(), 
+  Learnability = col_integer(), 
+  Light_easiness = col_integer(), 
+  Full_easiness = col_integer(), 
+  A_easiness = col_integer(), 
+  S_easiness = col_integer(), 
+  D_easiness = col_integer(), 
+  F_easiness = col_integer(), 
+  J_easiness = col_integer(),
+  K_easiness = col_integer(), 
+  L_easiness = col_integer(),
+  Semicolon_easiness = col_integer()
+  ))%>%
+  mutate(
+    levelCount = "2",
+    )
+
+level3_data <- read_csv("./../results/rating/3_levels.csv", col_types = cols(
+  ID = col_integer(), 
+  Mental_Demand = col_integer(),
+  Physical_Demand = col_integer(),
+  Temporal_Demand = col_integer(), 
+  Performance = col_integer(), 
+  Effort = col_integer(), 
+  Frustration = col_integer(), 
+  Learnability = col_integer(), 
+  Light_easiness = col_integer(), 
+  Medium_easiness = col_integer(), 
+  Full_easiness = col_integer(), 
+  A_easiness = col_integer(), 
+  S_easiness = col_integer(), 
+  D_easiness = col_integer(), 
+  F_easiness = col_integer(), 
+  J_easiness = col_integer(),
+  K_easiness = col_integer(), 
+  L_easiness = col_integer(),
+  Semicolon_easiness = col_integer()
+  ))%>%
+  mutate(
+    levelCount = "3",
+    )
+
+level4_data <- read_csv("./../results/rating/4_levels.csv", col_types = cols(
+  ID = col_integer(), 
+  Mental_Demand = col_integer(),
+  Physical_Demand = col_integer(),
+  Temporal_Demand = col_integer(), 
+  Performance = col_integer(), 
+  Effort = col_integer(), 
+  Frustration = col_integer(), 
+  Learnability = col_integer(), 
+  Light_easiness = col_integer(), 
+  MediumLow_easiness = col_integer(),
+  MediumHigh_easiness = col_integer(),
+  Full_easiness = col_integer(), 
+  A_easiness = col_integer(), 
+  S_easiness = col_integer(), 
+  D_easiness = col_integer(), 
+  F_easiness = col_integer(), 
+  J_easiness = col_integer(),
+  K_easiness = col_integer(), 
+  L_easiness = col_integer(),
+  Semicolon_easiness = col_integer()
+  ))%>%
+  mutate(
+    levelCount = "4",
+    )
+
+
+level2_data_tlx <- level2_data %>%
+  dplyr::select(ID:Learnability, levelCount)
+
+level2_data_tlx_long <- level2_data_tlx %>%
+  pivot_longer(
+    cols = Mental_Demand:Learnability, # Selects columns that start with "Test"
+    names_to = "Category",     # Name for the new column holding the original column names (e.g., Test1)
+    values_to = "Score"        # Name for the new column holding the values (e.g., 85, 92)
+  )
+
+level3_data_tlx <- level3_data %>%
+  dplyr::select(ID:Learnability, levelCount)
+
+level3_data_tlx_long <- level3_data_tlx %>%
+  pivot_longer(
+    cols = Mental_Demand:Learnability, # Selects columns that start with "Test"
+    names_to = "Category",     # Name for the new column holding the original column names (e.g., Test1)
+    values_to = "Score"        # Name for the new column holding the values (e.g., 85, 92)
+  )
+
+level4_data_tlx <- level4_data %>%
+  dplyr::select(ID:Learnability, levelCount)
+
+level4_data_tlx_long <- level4_data_tlx %>%
+  pivot_longer(
+    cols = Mental_Demand:Learnability, # Selects columns that start with "Test"
+    names_to = "Category",     # Name for the new column holding the original column names (e.g., Test1)
+    values_to = "Score"        # Name for the new column holding the values (e.g., 85, 92)
+  )
+
+log_tlx_ratings = bind_rows(level2_data_tlx_long, level3_data_tlx_long, level4_data_tlx_long)
+
+count_level <- c("2", "3", "4")
+
+```
+
+
+#### Mental Demand
+```{r warning=FALSE}
+
+log_MD <- log_tlx_ratings %>%
+  filter(Category == "Mental_Demand")
+
+log_MD$ID = factor(log_MD$ID)
+log_MD$levelCount = factor(log_MD$levelCount)
+
+boxplot(Score~levelCount,data=log_MD, main="Mental Demand",
+   xlab="likert scale", ylab="level counts", horizontal=TRUE, outline = FALSE)
+
+
+MD_summary <- log_MD %>%
+  group_by(levelCount) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+MD_summary
+
+# line + dot
+MD_graph <- ggplot(MD_summary) +
+  geom_pointrange( aes(x=reorder(levelCount, desc(levelCount)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#d68910", alpha=0.9, size=0.8) +
+  scale_y_continuous(lim=c(1,7)) + 
+  coord_flip()
+
+MD_graph
+
+MD_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("mental_demand_levels.pdf", width = 3, height = 3)
+```
+#### analysis
+
+```{r warning=FALSE}
+
+
+m = aov(Score ~ levelCount, data=log_MD) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+log_MD$ID = factor(log_MD$ID)
+friedman_test(Score ~ levelCount | ID, data=log_MD, distribution="asymptotic")
+
+
+library(reshape2) # for dcast
+df2 <- dcast(log_MD, ID ~ levelCount, value.var="Score") # make wide-format table
+ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+```
+
+Main effect on levelCounts: 2 is less mental demand than 3 and 4, 3 is less mental demand than 4
+
+#### Physical demand
+```{r warning=FALSE}
+log_PD <- log_tlx_ratings %>%
+  filter(Category == "Physical_Demand")
+
+log_PD$ID = factor(log_PD$ID)
+log_PD$levelCount = factor(log_PD$levelCount)
+
+boxplot(Score~levelCount,data=log_PD, main="Mental Demand",
+   xlab="likert scale", ylab="level counts", horizontal=TRUE, outline = FALSE)
+
+
+PD_summary <- log_PD %>%
+  group_by(levelCount) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+PD_summary
+
+# line + dot
+PD_graph <- ggplot(PD_summary) +
+  geom_pointrange( aes(x=reorder(levelCount, desc(levelCount)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#2e4053", alpha=0.9, size=0.8) +
+  scale_y_continuous(lim=c(1,7)) + 
+  coord_flip()
+
+PD_graph
+
+PD_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("physical_demand_levels.pdf", width = 3, height = 3)
+```
+#### analysis
+
+```{r warning=FALSE}
+m = aov(Score ~ levelCount, data=log_PD) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+log_PD$ID = factor(log_PD$ID)
+friedman_test(Score ~ levelCount | ID, data=log_PD, distribution="asymptotic")
+
+library(reshape2) # for dcast
+df2 <- dcast(log_PD, ID ~ levelCount, value.var="Score") # make wide-format table
+ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+```
+
+Main effect on levelCounts: 2 is less physical demand than 3 and 4, 3 is less physical demand than 4
+
+
+#### Temporal demand
+```{r warning=FALSE}
+
+log_TD <- log_tlx_ratings %>%
+  filter(Category == "Temporal_Demand")
+
+log_TD$ID = factor(log_TD$ID)
+log_TD$levelCount = factor(log_TD$levelCount)
+
+boxplot(Score~levelCount,data=log_TD, main="Mental Demand",
+   xlab="likert scale", ylab="level counts", horizontal=TRUE, outline = FALSE)
+
+
+TD_summary <- log_TD %>%
+  group_by(levelCount) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+TD_summary
+
+# line + dot
+TD_graph <- ggplot(TD_summary) +
+  geom_pointrange( aes(x=reorder(levelCount, desc(levelCount)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#884ea0", alpha=0.9, size=0.8) +
+  scale_y_continuous(lim=c(1,7)) + 
+  coord_flip()
+
+TD_graph
+
+TD_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("temporal_demand_levels.pdf", width = 3, height = 3)
+
+```
+#### analysis
+
+```{r warning=FALSE}
+m = aov(Score ~ levelCount, data=log_TD) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+log_TD$ID = factor(log_TD$ID)
+friedman_test(Score ~ levelCount | ID, data=log_TD, distribution="asymptotic")
+
+library(reshape2) # for dcast
+df2 <- dcast(log_TD, ID ~ levelCount, value.var="Score") # make wide-format table
+ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+
+```
+
+Main effect on levelCounts: 2 is less temporal demand than 3 and 4, 3 is less temporal demand than 4
+
+
+#### Performance
+```{r warning=FALSE}
+
+log_P <- log_tlx_ratings %>%
+  filter(Category == "Performance")
+
+log_P$ID = factor(log_P$ID)
+log_P$levelCount = factor(log_P$levelCount)
+
+boxplot(Score~levelCount,data=log_P, main="Mental Demand",
+   xlab="likert scale", ylab="level counts", horizontal=TRUE, outline = FALSE)
+
+
+P_summary <- log_P %>%
+  group_by(levelCount) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+P_summary
+
+# line + dot
+P_graph <- ggplot(P_summary) +
+  geom_pointrange( aes(x=reorder(levelCount, desc(levelCount)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#138d75", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(7,1)) + 
+  coord_flip()
+
+P_graph
+
+P_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("performance_levels.pdf", width = 3, height = 3)
+
+
+```
+#### analysis
+
+```{r warning=FALSE}
+m = aov(Score ~ levelCount, data=log_P) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+log_P$ID = factor(log_P$ID)
+friedman_test(Score ~ levelCount | ID, data=log_P, distribution="asymptotic")
+
+library(reshape2) # for dcast
+df2 <- dcast(log_P, ID ~ levelCount, value.var="Score") # make wide-format table
+ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+
+```
+
+Main effect on levelCounts: 2 is better than 3 and 4, 3 is better than 4
+
+#### Effort
+```{r warning=FALSE}
+
+
+log_E <- log_tlx_ratings %>%
+  filter(Category == "Effort")
+
+log_E$ID = factor(log_E$ID)
+log_E$levelCount = factor(log_E$levelCount)
+
+boxplot(Score~levelCount,data=log_E, main="Mental Demand",
+   xlab="likert scale", ylab="level counts", horizontal=TRUE, outline = FALSE)
+
+
+E_summary <- log_E %>%
+  group_by(levelCount) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+E_summary
+
+# line + dot
+E_graph <- ggplot(E_summary) +
+  geom_pointrange( aes(x=reorder(levelCount, desc(levelCount)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#273746", alpha=0.9, size=0.8) +
+  scale_y_continuous(lim=c(1,7)) + 
+  coord_flip()
+
+E_graph
+
+E_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("effort_levels.pdf", width = 3, height = 3)
+
+
+```
+#### analysis
+
+```{r warning=FALSE}
+
+m = aov(Score ~ levelCount, data=log_E) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+log_E$ID = factor(log_E$ID)
+friedman_test(Score ~ levelCount | ID, data=log_E, distribution="asymptotic")
+
+
+library(reshape2) # for dcast
+df2 <- dcast(log_E, ID ~ levelCount, value.var="Score") # make wide-format table
+ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+
+```
+
+Main effect on levelCounts: 2 is less effort than 3 and 4, 3 is less effort than 4
+
+
+#### Frustration
+```{r warning=FALSE}
+
+
+log_F <- log_tlx_ratings %>%
+  filter(Category == "Frustration")
+
+log_F$ID = factor(log_F$ID)
+log_F$levelCount = factor(log_F$levelCount)
+
+boxplot(Score~levelCount,data=log_F, main="Mental Demand",
+   xlab="likert scale", ylab="level counts", horizontal=TRUE, outline = FALSE)
+
+
+F_summary <- log_F %>%
+  group_by(levelCount) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+F_summary
+
+# line + dot
+F_graph <- ggplot(F_summary) +
+  geom_pointrange( aes(x=reorder(levelCount, desc(levelCount)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#cb4335", alpha=0.9, size=0.8) +
+  scale_y_continuous(lim=c(1,7)) + 
+  coord_flip()
+
+F_graph
+
+F_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("frustration_levels.pdf", width = 3, height = 3)
+
+```
+#### analysis
+
+```{r warning=FALSE}
+m = aov(Score ~ levelCount, data=log_F) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+log_F$ID = factor(log_F$ID)
+friedman_test(Score ~ levelCount | ID, data=log_F, distribution="asymptotic")
+
+library(reshape2) # for dcast
+df2 <- dcast(log_F, ID ~ levelCount, value.var="Score") # make wide-format table
+ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+
+```
+
+Main effect on levelCounts: 2 is less frustration than 3 and 4
+
+
+#### Learnability
+```{r warning=FALSE}
+
+
+
+log_L <- log_tlx_ratings %>%
+  filter(Category == "Learnability")
+
+log_L$ID = factor(log_L$ID)
+log_L$levelCount = factor(log_L$levelCount)
+
+boxplot(Score~levelCount,data=log_L, main="Mental Demand",
+   xlab="likert scale", ylab="level counts", horizontal=TRUE, outline = FALSE)
+
+
+L_summary <- log_L %>%
+  group_by(levelCount) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+L_summary
+
+# line + dot
+L_graph <- ggplot(L_summary) +
+  geom_pointrange( aes(x=reorder(levelCount, desc(levelCount)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#2e86c1", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(7,1)) + 
+  coord_flip()
+
+L_graph
+
+L_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("learnability_levels.pdf", width = 3, height = 3)
+
+
+```
+#### analysis
+
+```{r warning=FALSE}
+m = aov(Score ~ levelCount, data=log_L) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+log_L$ID = factor(log_L$ID)
+friedman_test(Score ~ levelCount | ID, data=log_L, distribution="asymptotic")
+
+
+library(reshape2) # for dcast
+df2 <- dcast(log_L, ID ~ levelCount, value.var="Score") # make wide-format table
+ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+
+pairwise.wilcox.test(x = log_L$Score, 
+                     g = log_L$levelCount, 
+                     p.adjust.method = "holm", 
+                     paired = TRUE)
+
+
+```
+
+Main effect on levelCounts: 2 is easier to learn than 3 and 4, 3 is easier to learn than 4
+
+
+#### 2 level - easiness
+```{r warning=FALSE}
+
+level2_data_level <- level2_data %>%
+  dplyr::select(ID, Light_easiness:Full_easiness)
+
+colnames(level2_data_level) <- c("ID", "light", "full")
+
+level2_data_level_long <- level2_data_level %>%
+  pivot_longer(
+    cols = light:full, # Selects columns that start with "Test"
+    names_to = "Level",     # Name for the new column holding the original column names (e.g., Test1)
+    values_to = "Score"        # Name for the new column holding the values (e.g., 85, 92)
+  )
+
+level2_data_key <- level2_data %>%
+  dplyr::select(ID, A_easiness:Semicolon_easiness)
+
+colnames(level2_data_key) <- c("ID", "A", "S", "D", "F", "J", "K", "L", "Semicolon")
+
+level2_data_key_long <- level2_data_key %>%
+  pivot_longer(
+    cols = A:Semicolon, # Selects columns that start with "Test"
+    names_to = "Key",     # Name for the new column holding the original column names (e.g., Test1)
+    values_to = "Score"        # Name for the new column holding the values (e.g., 85, 92)
+  )
+
+level2_data_level_long$ID = factor(level2_data_level_long$ID)
+level2_data_level_long$Level = factor(level2_data_level_long$Level, two_level_code)
+
+boxplot(Score~Level,data=level2_data_level_long, main="level easiness",
+   xlab="likert scale", ylab="level", horizontal=TRUE, outline = FALSE)
+
+
+level2_data_level_summary <- level2_data_level_long %>%
+  group_by(Level) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+level2_data_level_summary
+
+# line + dot
+level2_data_level_graph <- ggplot(level2_data_level_summary) +
+  geom_pointrange( aes(x=reorder(Level, desc(Level)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#2e86c1", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(7,1)) + 
+  coord_flip()
+
+level2_data_level_graph
+
+level2_data_level_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("2level_easiness_levels.pdf", width = 3, height = 2)
+
+
+level2_data_key_long$ID = factor(level2_data_key_long$ID)
+level2_data_key_long$Key = factor(level2_data_key_long$Key, key_code)
+
+boxplot(Score~Key,data=level2_data_key_long, main="level easiness",
+   xlab="likert scale", ylab="key", horizontal=TRUE, outline = FALSE)
+
+
+level2_data_key_summary <- level2_data_key_long %>%
+  group_by(Key) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+level2_data_key_summary
+
+# line + dot
+level2_data_key_graph <- ggplot(level2_data_key_summary) +
+  geom_pointrange( aes(x=reorder(Key, desc(Key)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#2e86c1", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(7,1)) + 
+  coord_flip()
+
+level2_data_key_graph
+
+level2_data_key_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("2level_easiness_keys.pdf", width = 3, height = 8)
+
+
+```
+#### analysis
+
+```{r warning=FALSE}
+m = aov(Score ~ Level, data=level2_data_level_long) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+level2_data_level_long$ID = factor(level2_data_level_long$ID)
+friedman_test(Score ~ Level | ID, data=level2_data_level_long, distribution="asymptotic")
+
+pairwise.wilcox.test(x = level2_data_level_long$Score, 
+                     g = level2_data_level_long$Level, 
+                     p.adjust.method = "holm", 
+                     paired = TRUE)
+
+m = aov(Score ~ Key, data=level2_data_key_long) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+level2_data_key_long$ID = factor(level2_data_key_long$ID)
+friedman_test(Score ~ Key | ID, data=level2_data_key_long, distribution="asymptotic")
+
+pairwise.wilcox.test(x = level2_data_key_long$Score, 
+                     g = level2_data_key_long$Key, 
+                     p.adjust.method = "holm", 
+                     paired = TRUE)
+
+```
+
+Main effect on Level: Full is easier than Light
+Main effect on Key: (FJ) easier than (ASDL;), J easier than K
+
+
+#### 3 level - easiness
+```{r warning=FALSE}
+
+level3_data_level <- level3_data %>%
+  dplyr::select(ID, Light_easiness:Full_easiness)
+
+colnames(level3_data_level) <- c("ID", "light", "medium", "full")
+
+level3_data_level_long <- level3_data_level %>%
+  pivot_longer(
+    cols = light:full, # Selects columns that start with "Test"
+    names_to = "Level",     # Name for the new column holding the original column names (e.g., Test1)
+    values_to = "Score"        # Name for the new column holding the values (e.g., 85, 92)
+  )
+
+level3_data_key <- level3_data %>%
+  dplyr::select(ID, A_easiness:Semicolon_easiness)
+
+colnames(level3_data_key) <- c("ID", "A", "S", "D", "F", "J", "K", "L", "Semicolon")
+
+level3_data_key_long <- level3_data_key %>%
+  pivot_longer(
+    cols = A:Semicolon, # Selects columns that start with "Test"
+    names_to = "Key",     # Name for the new column holding the original column names (e.g., Test1)
+    values_to = "Score"        # Name for the new column holding the values (e.g., 85, 92)
+  )
+
+level3_data_level_long$ID = factor(level3_data_level_long$ID)
+level3_data_level_long$Level = factor(level3_data_level_long$Level, three_level_code)
+
+boxplot(Score~Level,data=level3_data_level_long, main="level easiness",
+   xlab="likert scale", ylab="level", horizontal=TRUE, outline = FALSE)
+
+
+level3_data_level_summary <- level3_data_level_long %>%
+  group_by(Level) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+level3_data_level_summary
+
+# line + dot
+level3_data_level_graph <- ggplot(level3_data_level_summary) +
+  geom_pointrange( aes(x=reorder(Level, desc(Level)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#2e86c1", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(7,1)) + 
+  coord_flip()
+
+level3_data_level_graph
+
+level3_data_level_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("3level_easiness_levels.pdf", width = 3, height = 3)
+
+
+level3_data_key_long$ID = factor(level3_data_key_long$ID)
+level3_data_key_long$Key = factor(level3_data_key_long$Key, key_code)
+
+boxplot(Score~Key,data=level3_data_key_long, main="key easiness",
+   xlab="likert scale", ylab="key", horizontal=TRUE, outline = FALSE)
+
+
+level3_data_key_summary <- level3_data_key_long %>%
+  group_by(Key) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+level3_data_key_summary
+
+# line + dot
+level3_data_key_graph <- ggplot(level3_data_key_summary) +
+  geom_pointrange( aes(x=reorder(Key, desc(Key)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#2e86c1", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(7,1)) + 
+  coord_flip()
+
+level3_data_key_graph
+
+level3_data_key_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("3level_easiness_keys.pdf", width = 3, height = 8)
+
+
+```
+#### analysis
+
+```{r warning=FALSE}
+m = aov(Score ~ Level, data=level3_data_level_long) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+level3_data_level_long$ID = factor(level3_data_level_long$ID)
+friedman_test(Score ~ Level | ID, data=level3_data_level_long, distribution="asymptotic")
+
+pairwise.wilcox.test(x = level3_data_level_long$Score, 
+                     g = level3_data_level_long$Level, 
+                     p.adjust.method = "holm", 
+                     paired = TRUE)
+
+m = aov(Score ~ Key, data=level3_data_key_long) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+level3_data_key_long$ID = factor(level3_data_key_long$ID)
+friedman_test(Score ~ Key | ID, data=level3_data_key_long, distribution="asymptotic")
+
+pairwise.wilcox.test(x = level3_data_key_long$Score, 
+                     g = level3_data_key_long$Key, 
+                     p.adjust.method = "holm", 
+                     paired = TRUE)
+
+```
+
+Main effect on Level: Full is easier than light and medium
+Main effect on Key: (FJ) is easier than (ASDKL;), K is easier than L
+
+
+
+#### 4 level - easiness
+```{r warning=FALSE}
+
+level4_data_level <- level4_data %>%
+  dplyr::select(ID, Light_easiness:Full_easiness)
+
+colnames(level4_data_level) <- c("ID", "light", "mediumLow", "mediumHigh","full")
+
+level4_data_level_long <- level4_data_level %>%
+  pivot_longer(
+    cols = light:full, # Selects columns that start with "Test"
+    names_to = "Level",     # Name for the new column holding the original column names (e.g., Test1)
+    values_to = "Score"        # Name for the new column holding the values (e.g., 85, 92)
+  )
+
+level4_data_key <- level4_data %>%
+  dplyr::select(ID, A_easiness:Semicolon_easiness)
+
+colnames(level4_data_key) <- c("ID", "A", "S", "D", "F", "J", "K", "L", "Semicolon")
+
+level4_data_key_long <- level4_data_key %>%
+  pivot_longer(
+    cols = A:Semicolon, # Selects columns that start with "Test"
+    names_to = "Key",     # Name for the new column holding the original column names (e.g., Test1)
+    values_to = "Score"        # Name for the new column holding the values (e.g., 85, 92)
+  )
+
+level4_data_level_long$ID = factor(level4_data_level_long$ID)
+level4_data_level_long$Level = factor(level4_data_level_long$Level, four_level_code)
+
+boxplot(Score~Level,data=level4_data_level_long, main="level easiness",
+   xlab="likert scale", ylab="level", horizontal=TRUE, outline = FALSE)
+
+
+level4_data_level_summary <- level4_data_level_long %>%
+  group_by(Level) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+level4_data_level_summary
+
+# line + dot
+level4_data_level_graph <- ggplot(level4_data_level_summary) +
+  geom_pointrange( aes(x=reorder(Level, desc(Level)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#2e86c1", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(7,1)) + 
+  coord_flip()
+
+level4_data_level_graph
+
+level4_data_level_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("4level_easiness_levels.pdf", width = 3, height = 4)
+
+
+level4_data_key_long$ID = factor(level4_data_key_long$ID)
+level4_data_key_long$Key = factor(level4_data_key_long$Key, key_code)
+
+boxplot(Score~Key,data=level4_data_key_long, main="key easiness",
+   xlab="likert scale", ylab="key", horizontal=TRUE, outline = FALSE)
+
+
+level4_data_key_summary <- level4_data_key_long %>%
+  group_by(Key) %>%
+  summarize(
+    meanScore = Score %>% mean(na.rm=TRUE),
+    lowCI = ci(Score)[2]%>% pmax(0),
+    highCI = ci(Score)[3]%>% pmin(7),
+    sd = ci(Score)[4],
+    std = Score %>% sd())
+
+level4_data_key_summary
+
+# line + dot
+level4_data_key_graph <- ggplot(level4_data_key_summary) +
+  geom_pointrange( aes(x=reorder(Key, desc(Key)), y=meanScore, ymin=lowCI, ymax=highCI), colour="#2e86c1", alpha=0.9, size=0.8) +
+  scale_y_reverse(lim=c(7,1)) + 
+  coord_flip()
+
+level4_data_key_graph
+
+level4_data_key_graph + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("4level_easiness_keys.pdf", width = 3, height = 8)
+
+
+```
+#### analysis
+
+```{r warning=FALSE}
+m = aov(Score ~ Level, data=level4_data_level_long) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+level4_data_level_long$ID = factor(level4_data_level_long$ID)
+friedman_test(Score ~ Level | ID, data=level4_data_level_long, distribution="asymptotic")
+
+pairwise.wilcox.test(x = level4_data_level_long$Score, 
+                     g = level4_data_level_long$Level, 
+                     p.adjust.method = "holm", 
+                     paired = TRUE)
+
+m = aov(Score ~ Key, data=level4_data_key_long) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
+library(coin)
+level4_data_key_long$ID = factor(level4_data_key_long$ID)
+friedman_test(Score ~ Key | ID, data=level4_data_key_long, distribution="asymptotic")
+
+pairwise.wilcox.test(x = level4_data_key_long$Score, 
+                     g = level4_data_key_long$Key, 
+                     p.adjust.method = "holm", 
+                     paired = TRUE)
+
+```
+
+Main effect on Level: full is easier than light, mediumLow, and mediumHigh; Light is easier than mediumLow, and mediumHigh
+Main effect on Key: (FJ) is easier than (ASDKL;)
+
+
+
+
