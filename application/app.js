@@ -1,5 +1,5 @@
 // Module-based app that maps analog keyboard pressure to formatting
-import { ConnectNew, ConnectPrev } from '../experimentation2/wooting-js.js';
+import { ConnectNew, ConnectPrev } from './wootingconnect.js';
 
 let rawPressure = 0;             // latest raw pressure 0-255
 let currentPressure = 0;         // latest percent 0-100
@@ -16,7 +16,7 @@ let connectedKeyboards = [];
   if (pressureValueEl) {
     pressureValueEl.textContent = String(currentPressure);
   }
-}
+
 
 function resetPeakPressure() {
   peakRawPressure = rawPressure;
