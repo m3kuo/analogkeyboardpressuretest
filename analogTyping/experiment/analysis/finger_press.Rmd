@@ -1,0 +1,428 @@
+---
+title: "trial results"
+author: "Allen Yeh"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```
+```
+
+```{r warning=FALSE}
+library(tidyverse)
+library(gmodels)
+library(rstatix)
+library(ggplot2)
+library(ez)
+
+#increase print limit to 2500 values
+options(max.print=3000)
+```
+
+### Import data
+
+#### Read the csv file and claim the data type
+```{r}
+ 
+participant_id = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "40", "23", "24")
+
+key_code = c("A", "S", "D", "F", "J", "K", "L", "Semicolon")
+
+level_code = c("full", "mediumHigh", "mediumLow", "medium", "light")
+level_cols <- c("full" = "#922B21", "mediumHigh" = "#1F618D", "mediumLow" = "#1E8449", "medium" = "#1E8449", "light" = "#B7950B")
+
+# Initialize an empty data frame
+trial_log = NULL
+
+for (x in participant_id) {
+  filename <- paste("./../results/", x, ".csv", sep="")
+  trial_user_log <- read_csv(filename, col_types = cols(
+    id = col_factor(levels = participant_id),
+    level = col_integer(),
+    block = col_factor(levels = c("0", "1", "2", "3", "4", "5")),
+    trial = col_integer(),
+    levelCounts = col_factor(levels = c("2", "3", "4")),
+    targetKey = col_factor(levels = key_code),
+    targetLevel = col_factor(levels = level_code),
+    pressedLevel = col_factor(levels = level_code),
+    pressedRaw = col_integer(),
+    isSuccessful = col_logical(),
+    startTime = col_double(),
+    endTime = col_double(),
+    time = col_double(),
+  )) %>% filter(block %in% c("1", "2", "3", "4", "5"))
+  trial_log = bind_rows(trial_log,trial_user_log)
+}
+
+
+```
+
+### functions
+
+```{r warning=FALSE}
+percent <- function(num, digits = 2, ...) {      
+  percentage <-formatC(num * 100, format = "f", digits = digits, ...)
+  
+  # appending "%" symbol at the end of
+  # calculate percentage value
+  paste0(percentage, "%")
+}
+
+INT <- function(x){
+    qnorm((rank(x) - 0.5)/length(x))
+}
+```
+
+### Filter outlier with time
+```{r warning = FALSE}
+trial_log_filtered <- trial_log %>% 
+  group_by(id, levelCounts) %>% 
+  mutate(IQR = IQR(time),
+            O_upper = quantile(time, probs=c( .75), na.rm = FALSE)+1.5*IQR,  
+            O_lower = quantile(time, probs=c( .25), na.rm = FALSE)-1.5*IQR  
+  ) %>% 
+  filter(O_lower <= time & time <= O_upper)%>% 
+  ungroup()
+```
+
+Total 437 trials (5.1%) got removed.
+
+```{r warning=FALSE}
+trial_log_filtered <- trial_log_filtered %>%
+  filter(block != c("1"))
+```
+
+Remove the first block due to learning effect.
+
+### Two levels
+#### actual press - user threshold
+```{r warning=FALSE}
+log_twolevel <- trial_log_filtered %>%
+  filter(levelCounts == c("2"))
+
+log_twolevel_user <- log_twolevel %>% 
+  group_by(id, targetLevel, targetKey) %>% 
+  mutate(
+    pressRawPercent = pressedRaw * 100.0 / 255.0,
+    pressRawMM = pressedRaw * 4.0 / 255.0,
+  ) %>% 
+  ungroup()
+
+log_twolevel_user_dist <- log_twolevel_user %>% 
+  group_by(id, targetLevel, targetKey) %>% 
+  summarize(
+    press_ave = sum(pressRawMM) / n(),
+    n_trials = n()
+  )%>%
+  ungroup()
+
+log_twolevel_user_dist
+
+log_twolevel_user_level_summary <- log_twolevel_user_dist  %>%
+  group_by(targetLevel, targetKey) %>%
+  summarize(
+    meanDist = press_ave %>% mean(na.rm=TRUE),
+    lowCIDist = ci(press_ave)[2] %>% pmax(0),
+    highCIDist = ci(press_ave)[3] %>% pmin(4),
+    sdDist = ci(press_ave)[4],
+    stdDist = sd(press_ave)) %>%
+  ungroup() %>%
+  arrange(targetKey, targetLevel)
+
+log_twolevel_user_level_summary
+
+
+twolovel_user_press <- ggplot(log_twolevel_user_level_summary,
+  aes(
+    x = targetKey,
+    y = meanDist,
+    fill = targetLevel,
+  )
+) + 
+  scale_fill_manual(values=level_cols)+
+  geom_hline(yintercept=0.2, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=1.4, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=2.8, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=3.92, linetype="dashed", color = "#5D6D7E")+ 
+  geom_bar(position=position_identity(), stat="identity")+
+  geom_linerange( aes(x=targetKey, y=meanDist, ymin=lowCIDist, ymax=highCIDist), alpha=0.9, size=1.2) + 
+  geom_text(aes(label = round(meanDist, digits = 2)), vjust = 1)
+
+twolovel_user_press
+
+twolovel_user_press + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_line( size=.1, color="gray" ),
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("2level_key_press.pdf", width = 8, height = 2)
+
+
+```
+
+#### analysis
+```{r warning=FALSE}
+# m = aov(press_ave ~ targetLevel*targetKey, data=log_twolevel_user_dist) # make anova-type linear model
+# shapiro.test(residuals(m))
+# qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+# 
+# library(rcompanion)
+# log_twolevel_user_dist$press_aveM_trans = transformTukey(log_twolevel_user_dist$press_ave)
+# 
+# m = aov(press_aveM_trans ~ targetLevel*targetKey, data=log_twolevel_user_dist) # make anova-type linear model
+# shapiro.test(residuals(m))
+# qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+# 
+# plotNormalHistogram(log_twolevel_user_dist$press_ave)
+# # 
+# # library(ez) # for ezANOVA
+# # log_twolevel_accuracy$id = factor(log_twolevel_accuracy$id)
+# # m = ezANOVA(dv=accuracy_ave, within=c(targetLevel,targetKey), wid=id, data=log_twolevel_accuracy)
+# # m$Mauchly # p<.05 indicates a sphericity violation
+# # m$ANOVA # use if no violation
+# 
+# 
+# library(lme4)
+# library(lmerTest)
+# library(car)
+# 
+# log_twolevel_user_dist$id = factor(log_twolevel_user_dist$id)
+# contrasts(log_twolevel_user_dist$targetLevel) <-"contr.sum"
+# contrasts(log_twolevel_user_dist$targetKey) <-"contr.sum"
+# m = glmer(press_ave ~ targetLevel*targetKey + (1|id), data=log_twolevel_user_dist, family=poisson)
+# # use family=quasipoissonif overdispersion
+# Anova(m, type=3)
+
+```
+
+### Three levels
+#### actual press - user threshold
+```{r warning=FALSE}
+
+log_threelevel <- trial_log_filtered %>%
+  filter(levelCounts == c("3"))
+
+log_threelevel_user <- log_threelevel %>% 
+  group_by(id, targetLevel, targetKey) %>% 
+  mutate(
+    pressRawPercent = pressedRaw * 100.0 / 255.0,
+    pressRawMM = pressedRaw * 4.0 / 255.0,
+  )  %>%
+  ungroup()
+
+log_threelevel_user_dist <- log_threelevel_user %>% 
+  group_by(id, targetLevel, targetKey) %>% 
+  summarize(
+    press_ave = sum(pressRawMM) / n(),
+    n_trials = n()
+  )%>%
+  ungroup()
+
+log_threelevel_user_dist
+
+log_threelevel_user_level_summary <- log_threelevel_user_dist  %>%
+  group_by(targetLevel, targetKey) %>%
+  summarize(
+    meanDist = press_ave %>% mean(na.rm=TRUE),
+    lowCIDist = ci(press_ave)[2] %>% pmax(0),
+    highCIDist = ci(press_ave)[3] %>% pmin(4),
+    sdDist = ci(press_ave)[4],
+    stdDist = sd(press_ave)) %>%
+  ungroup() %>%
+  arrange(targetKey, targetLevel)
+
+log_threelevel_user_level_summary
+
+
+
+threelovel_user_press <- ggplot(log_threelevel_user_level_summary,
+  aes(
+    x = targetKey,
+    y = meanDist,
+    fill = targetLevel,
+  )
+) + 
+  scale_fill_manual(values=level_cols)+
+  geom_hline(yintercept=0.2, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=1.4, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=2.8, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=3.92, linetype="dashed", color = "#5D6D7E")+ 
+  geom_bar(position=position_identity(), stat="identity")+
+  geom_linerange( aes(x=targetKey, y=meanDist, ymin=lowCIDist, ymax=highCIDist), alpha=0.9, size=1.2)+ 
+  geom_text(aes(label = round(meanDist, digits = 2)), vjust = 1)
+
+threelovel_user_press
+
+threelovel_user_press + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_line( size=.1, color="gray" ),
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("3level_key_press.pdf", width = 8, height = 2)
+
+```
+
+
+#### analysis
+```{r warning=FALSE}
+# m = aov(press_ave ~ targetLevel*targetKey, data=log_threelevel_user_dist) # make anova-type linear model
+# shapiro.test(residuals(m))
+# qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+# 
+# library(rcompanion)
+# log_threelevel_user_dist$press_aveM_trans = transformTukey(log_threelevel_user_dist$press_ave)
+# 
+# m = aov(press_aveM_trans ~ targetLevel*targetKey, data=log_threelevel_user_dist) # make anova-type linear model
+# shapiro.test(residuals(m))
+# qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+# 
+# plotNormalHistogram(log_threelevel_user_dist$press_ave)
+# # 
+# # library(ez) # for ezANOVA
+# # log_twolevel_accuracy$id = factor(log_twolevel_accuracy$id)
+# # m = ezANOVA(dv=accuracy_ave, within=c(targetLevel,targetKey), wid=id, data=log_twolevel_accuracy)
+# # m$Mauchly # p<.05 indicates a sphericity violation
+# # m$ANOVA # use if no violation
+# 
+# 
+# library(lme4)
+# library(lmerTest)
+# library(car)
+# 
+# log_threelevel_user_dist$id = factor(log_threelevel_user_dist$id)
+# contrasts(log_threelevel_user_dist$targetLevel) <-"contr.sum"
+# contrasts(log_threelevel_user_dist$targetKey) <-"contr.sum"
+# m = glmer(press_ave ~ targetLevel*targetKey + (1|id), data=log_threelevel_user_dist, family=poisson)
+# # use family=quasipoissonif overdispersion
+# Anova(m, type=3)
+
+```
+
+
+### Four levels
+
+#### actual press - user threshold
+```{r warning=FALSE}
+log_fourlevel <- trial_log_filtered %>%
+  filter(levelCounts == c("4"))
+
+log_fourlevel_user <- log_fourlevel %>% 
+  group_by(id, targetLevel, targetKey) %>% 
+  mutate(
+    pressRawPercent = pressedRaw * 100.0 / 255.0,
+    pressRawMM = pressedRaw * 4 / 255.0,
+  ) %>% 
+  ungroup()
+
+log_fourlevel_user_dist <- log_fourlevel_user %>% 
+  group_by(id, targetLevel, targetKey) %>% 
+  summarize(
+    press_ave = sum(pressRawMM) / n(),
+    n_trials = n()
+  )%>%
+  ungroup()
+
+log_fourlevel_user_dist
+
+log_fourlevel_user_level_summary <- log_fourlevel_user_dist  %>%
+  group_by(targetLevel, targetKey) %>%
+  summarize(
+    meanDist = press_ave %>% mean(na.rm=TRUE),
+    lowCIDist = ci(press_ave)[2] %>% pmax(0),
+    highCIDist = ci(press_ave)[3] %>% pmin(4),
+    sdDist = ci(press_ave)[4],
+    stdDist = sd(press_ave)) %>%
+  ungroup() %>%
+  arrange(targetKey, targetLevel)
+
+log_fourlevel_user_level_summary
+
+
+fourlovel_user_press <- ggplot(log_fourlevel_user_level_summary,
+  aes(
+    x = targetKey,
+    y = meanDist,
+    fill = targetLevel,
+  )
+) + 
+  scale_fill_manual(values=level_cols)+
+  geom_hline(yintercept=0.2, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=1.4, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=2.8, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=3.92, linetype="dashed", color = "#5D6D7E")+ 
+  geom_bar(position=position_identity(), stat="identity")+
+  geom_linerange( aes(x=targetKey, y=meanDist, ymin=lowCIDist, ymax=highCIDist), alpha=0.9, size=1.2)+ 
+  geom_text(aes(label = round(meanDist, digits = 2)), vjust = 1)
+
+fourlovel_user_press
+
+
+fourlovel_user_press + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_line( size=.1, color="gray" ),
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_blank() ,
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("4level_key_press.pdf", width = 8, height = 2)
+
+```
+
+
+#### analysis
+```{r warning=FALSE}
+# m = aov(press_ave ~ targetLevel*targetKey, data=log_fourlevel_user_dist) # make anova-type linear model
+# shapiro.test(residuals(m))
+# qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+# 
+# library(rcompanion)
+# log_fourlevel_user_dist$press_aveM_trans = transformTukey(log_fourlevel_user_dist$press_ave)
+# 
+# m = aov(press_aveM_trans ~ targetLevel*targetKey, data=log_fourlevel_user_dist) # make anova-type linear model
+# shapiro.test(residuals(m))
+# qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+# 
+# plotNormalHistogram(log_fourlevel_user_dist$press_ave)
+# # 
+# # library(ez) # for ezANOVA
+# # log_twolevel_accuracy$id = factor(log_twolevel_accuracy$id)
+# # m = ezANOVA(dv=accuracy_ave, within=c(targetLevel,targetKey), wid=id, data=log_twolevel_accuracy)
+# # m$Mauchly # p<.05 indicates a sphericity violation
+# # m$ANOVA # use if no violation
+# 
+# 
+# library(lme4)
+# library(lmerTest)
+# library(car)
+# 
+# log_fourlevel_user_dist$id = factor(log_fourlevel_user_dist$id)
+# contrasts(log_fourlevel_user_dist$targetLevel) <-"contr.sum"
+# contrasts(log_fourlevel_user_dist$targetKey) <-"contr.sum"
+# m = glmer(press_ave ~ targetLevel*targetKey + (1|id), data=log_fourlevel_user_dist, family=poisson)
+# # use family=quasipoissonif overdispersion
+# Anova(m, type=3)
+
+```

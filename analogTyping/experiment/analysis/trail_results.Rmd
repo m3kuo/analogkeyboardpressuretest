@@ -15,6 +15,9 @@ library(gmodels)
 library(rstatix)
 library(ggplot2)
 library(ez)
+
+#increase print limit to 2500 values
+options(max.print=3000)
 ```
 
 ### Import data
@@ -64,14 +67,32 @@ percent <- function(num, digits = 2, ...) {
   # calculate percentage value
   paste0(percentage, "%")
 }
+
+INT <- function(x){
+    qnorm((rank(x) - 0.5)/length(x))
+}
 ```
+
+### Filter outlier with time
+```{r warning = FALSE}
+trial_log_filtered <- trial_log %>% 
+  group_by(id, levelCounts) %>% 
+  mutate(IQR = IQR(time),
+            O_upper = quantile(time, probs=c( .75), na.rm = FALSE)+1.5*IQR,  
+            O_lower = quantile(time, probs=c( .25), na.rm = FALSE)-1.5*IQR  
+  ) %>% 
+  filter(O_lower <= time & time <= O_upper)%>% 
+  ungroup()
+```
+
+Total 437 trials (5.1%) got removed.
 
 ### Total
 
 #### block accuracy
 ```{r warning=FALSE}
 
-log_block_accuracy <- trial_log %>%
+log_block_accuracy <- trial_log_filtered %>%
   group_by(id, levelCounts, block) %>%
   summarize(
     accuracy_ave = sum(isSuccessful) / n(),
@@ -109,20 +130,25 @@ m = aov(accuracy_ave ~ block*levelCounts, data=log_block_accuracy) # make anova-
 shapiro.test(residuals(m))
 qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 
-library(ARTool)
+library(ez) # for ezANOVA
 log_block_accuracy$id = factor(log_block_accuracy$id)
-m = art(accuracy_ave ~ block*levelCounts + (1|id), data=log_block_accuracy) # subjects (S) as random effect
-anova(m)
+m = ezANOVA(dv=accuracy_ave, within=c(block, levelCounts), wid=id, data=log_block_accuracy)
+m$Mauchly # p<.05 indicates a sphericity violation
+m$ANOVA # use if no violation
 
-# art.con(m, "block")
+pairwise.t.test(log_block_accuracy$accuracy_ave, log_block_accuracy$block, paired=TRUE, p.adjust="holm")
 
 ```
 
-No effect on block, no learning effect. Including all trials.
+Effect on block, pairwise only showed the difference between block 1 and 4. Remove block 1 for following test.
+
 
 #### levelCount accuracy
 ```{r warning=FALSE}
-log_accuracy <- trial_log %>%
+trial_log_filtered <- trial_log_filtered %>%
+  filter(block != c("1"))
+
+log_accuracy <- trial_log_filtered %>%
   group_by(id, levelCounts) %>%
   summarize(
     accuracy_ave = sum(isSuccessful) / n(),
@@ -178,6 +204,13 @@ accuracy_graph + theme( # remove the vertical grid lines
 
 ggsave("accuracy_levels.pdf", width = 4, height = 3)
 
+
+
+```
+
+
+##### levelCount accuracy analysis
+```{r warning=FALSE}
 m = aov(accuracy_ave ~ levelCounts, data=log_accuracy) # make anova-type linear model
 shapiro.test(residuals(m))
 qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
@@ -188,15 +221,7 @@ m = ezANOVA(dv=accuracy_ave, within=c(levelCounts), wid=id, data=log_accuracy)
 m$Mauchly # p<.05 indicates a sphericity violation
 m$ANOVA # use if no violation
 
-#library(reshape2) # for dcast
-#df2 <- dcast(log_accuracy, id ~ levelCounts, value.var="accuracy_ave") # make wide-format table
-#ab = t.test(df2$"2", df2$"3", paired=TRUE, var.equal=TRUE) # a vs. b
-#ac = t.test(df2$"2", df2$"4", paired=TRUE, var.equal=TRUE) # a vs. c
-#bc = t.test(df2$"3", df2$"4", paired=TRUE, var.equal=TRUE) # b vs. c
-#p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
-
 pairwise.t.test(log_accuracy$accuracy_ave, log_accuracy$levelCounts, paired=TRUE, p.adjust="holm")
-
 ```
 
 2 levels is better than 3 and 4 levels. 
@@ -205,15 +230,9 @@ pairwise.t.test(log_accuracy$accuracy_ave, log_accuracy$levelCounts, paired=TRUE
 
 #### levelCount time
 ```{r warning=FALSE}
-log_time_filtered <- trial_log %>% 
-  group_by(id) %>% 
-  mutate(IQR = IQR(time),
-            O_upper = quantile(time, probs=c( .75), na.rm = FALSE)+1.5*IQR,  
-            O_lower = quantile(time, probs=c( .25), na.rm = FALSE)-1.5*IQR  
-  ) %>% 
-  filter(O_lower <= time & time <= O_upper)
 
-log_time <- log_time_filtered %>%
+
+log_time <- trial_log_filtered %>%
   group_by(id, levelCounts) %>%
   summarize(
     time_ave = sum(time) / n(),
@@ -249,7 +268,7 @@ log_time_summary
 # line + dot
 time_graph <- ggplot(log_time_summary) +
   geom_pointrange( aes(x=reorder(levelCounts, desc(levelCounts)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
-  scale_y_continuous(lim=c(900,1800)) + 
+  scale_y_continuous(lim=c(900,1850)) + 
   coord_flip()
 
 time_graph
@@ -269,28 +288,33 @@ time_graph + theme( # remove the vertical grid lines
 
 ggsave("time_levels.pdf", width = 4, height = 3)
 
+
+```
+
+
+##### levelCount time analysis
+```{r warning=FALSE}
 m = aov(time_ave ~ levelCounts, data=log_time) # make anova-type linear model
 shapiro.test(residuals(m))
 qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 
-# df has subjects (S), one within-Ss factor (X) w/levels (a,b,c), and continuous response (Y)
-library(coin)
+library(rcompanion)
+log_time$time_ave_trans = transformTukey(log_time$time_ave)
+
+m = aov(time_ave_trans ~ levelCounts, data=log_time) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+library(ez) # for ezANOVA
 log_time$id = factor(log_time$id)
-friedman_test(time_ave ~ levelCounts | id, data=log_time, distribution="asymptotic")
+m = ezANOVA(dv=time_ave_trans, within=c(levelCounts), wid=id, data=log_time)
+m$Mauchly # p<.05 indicates a sphericity violation
+m$ANOVA # use if no violation
 
-library(reshape2) # for dcast
-df2 <- dcast(log_time, id ~ levelCounts, value.var="time_ave") # make wide-format table
-ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
-ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
-bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
-p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
-
-
-
-pairwise.t.test(log_time$time_ave, log_time$levelCounts, paired=TRUE, p.adjust="holm")
-
+pairwise.t.test(log_time$time_ave_trans, log_time$levelCounts, paired=TRUE, p.adjust="holm")
 ```
 
+Using tucky for normalization. 
 2 levels is faster than 3 and 4 levels. 
 3 levels is faster than 4 levels.
 
@@ -299,7 +323,7 @@ pairwise.t.test(log_time$time_ave, log_time$levelCounts, paired=TRUE, p.adjust="
 
 #### accuracy
 ```{r warning=FALSE}
-log_twolevel_accuracy <- trial_log %>%
+log_twolevel_accuracy <- trial_log_filtered %>%
   filter(levelCounts == c("2")) %>%
   group_by(id, targetLevel, targetKey) %>%
   summarize(
@@ -334,16 +358,6 @@ log_twolevel_accuracy_summary %>% ggplot(
 ) +
   geom_pointrange(position = pd) 
 
-m = aov(accuracy_ave ~ targetLevel*targetKey, data=log_twolevel_accuracy) # make anova-type linear model
-shapiro.test(residuals(m))
-qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
-
-library(ARTool)
-log_twolevel_accuracy$id = factor(log_twolevel_accuracy$id) # Subject id must be nominal
-m = art(accuracy_ave ~ targetLevel*targetKey + (1|id), data=log_twolevel_accuracy) # subjects (S) as random effect
-anova(m)
-
-art.con(m, "targetLevel")
 
 log_twolevel_accuracy_summary_level <- log_twolevel_accuracy  %>%
   group_by(targetLevel) %>%
@@ -379,7 +393,7 @@ twolevel_accuracy_level + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("accuracy_twolevel_level.pdf", width = 4, height = 2)
+ggsave("2level_accuracy_level.pdf", width = 4, height = 2)
 
 log_twolevel_accuracy_summary_key <- log_twolevel_accuracy  %>%
   group_by(targetKey) %>%
@@ -415,102 +429,44 @@ twolevel_accuracy_key + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("accuracy_twolevel_key.pdf", width = 4, height = 8)
+ggsave("2level_accuracy_key.pdf", width = 4, height = 8)
 ```
 
-Main effect on targetLevel: Full has higher accuracy.
 
-
-
-#### actual press - user threshold
+##### accuracy analysis
 ```{r warning=FALSE}
-log_twolevel <- trial_log %>%
-  filter(levelCounts == c("2"))
+m = aov(accuracy_ave ~ targetLevel*targetKey, data=log_twolevel_accuracy) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 
-log_twolevel_user <- log_twolevel %>% 
-  group_by(id, targetLevel) %>% 
-  mutate(
-    pressRawPercent = pressedRaw * 100.0 / 255.0,
-  ) %>% 
-  ungroup()
-
-log_twolevel_user_quantile <- log_twolevel_user%>%
-  group_by(id, targetLevel) %>%
-  summarize(
-    lower_outlier = boxplot.stats(pressedRaw)$stats[c(1)],
-    lower = boxplot.stats(pressedRaw)$stats[c(2)],
-    median = boxplot.stats(pressedRaw)$stats[c(3)],
-    upper = boxplot.stats(pressedRaw)$stats[c(4)],
-    upper_outlier = boxplot.stats(pressedRaw)$stats[c(5)],
-  ) %>%
-  ungroup() %>%
-  arrange(id, targetLevel)
-
-library(reshape2) # for dcast
-
-melted_threshold <- melt(log_twolevel_user_quantile, id.vars = c("id", "targetLevel"), measure.vars = c("lower_outlier", "lower", "median", "upper", "upper_outlier"))
-
-#melted_threshold
-
-cast_threshold <- dcast(melted_threshold, id~targetLevel * variable, value.var="value")%>%
-  group_by(id) %>%
-  mutate(
-    full_threshold = median(c(full_lower_outlier, full_lower,light_upper, light_upper_outlier))
-  ) %>%
-  ungroup()
-
-#cast_threshold
-
-log_twolevel_user <- merge(log_twolevel_user, cast_threshold,
-                          by = 'id', all = TRUE)
-
-log_twolevel_user <- log_twolevel_user %>% 
-  mutate(
-    pressLevel_user = ifelse(pressedRaw >= full_threshold, "full", "light"),
-    isSuccessful_user = (targetLevel == pressLevel_user)
-  )
-
-#log_twolevel_user
+plotNormalHistogram(log_twolevel_accuracy$accuracy_ave)
+# 
+# library(ez) # for ezANOVA
+# log_twolevel_accuracy$id = factor(log_twolevel_accuracy$id)
+# m = ezANOVA(dv=accuracy_ave, within=c(targetLevel,targetKey), wid=id, data=log_twolevel_accuracy)
+# m$Mauchly # p<.05 indicates a sphericity violation
+# m$ANOVA # use if no violation
 
 
-log_twolevel_user %>% ggplot(
-  aes(
-    x = targetLevel,
-    y = pressRawPercent
-  )
-) + 
-  geom_violin() + 
-  geom_boxplot(width = 0.03, outlier.shape = 1, , outlier.alpha = 0.3)
+library(lme4)
+library(lmerTest)
+library(car)
+
+log_twolevel_accuracy$id = factor(log_twolevel_accuracy$id)
+contrasts(log_twolevel_accuracy$targetLevel) <-"contr.sum"
+contrasts(log_twolevel_accuracy$targetKey) <-"contr.sum"
+m = glmer(accuracy_ave ~ targetLevel*targetKey + (1|id), data=log_twolevel_accuracy, family=poisson)
+# use family=quasipoissonif overdispersion
+Anova(m, type=3)
 
 ```
 
-##### confusion table
-```{r warning=FALSE}
-library(cvms)
-conf_mat <- confusion_matrix(targets = log_twolevel_user$targetLevel,
-                             predictions = log_twolevel_user$pressedLevel)
-
-conf_mat
-
-plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
-  add_normalized = FALSE,
-  add_row_percentages = FALSE)
-
-conf_mat <- confusion_matrix(targets = log_twolevel_user$targetLevel,
-                             predictions = log_twolevel_user$pressLevel_user)
-
-conf_mat
-
-plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
-  add_normalized = FALSE,
-  add_row_percentages = FALSE)
-
-```
+No effect.
 
 
 #### time
 ```{r warning=FALSE}
-log_twoLevel_time <- log_time_filtered%>%
+log_twoLevel_time <- trial_log_filtered%>%
   filter(levelCounts == c("2")) %>%
   group_by(id, targetLevel, targetKey) %>%
   summarize(
@@ -545,18 +501,6 @@ log_twoLevel_time_summary %>% ggplot(
 ) +
   geom_pointrange(position = pd) 
 
-m = aov(time_ave ~ targetLevel*targetKey, data=log_twoLevel_time) # make anova-type linear model
-shapiro.test(residuals(m))
-qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
-
-library(ARTool)
-log_twoLevel_time$id = factor(log_twoLevel_time$id) # Subject id must be nominal
-m = art(time_ave ~ targetLevel*targetKey + (1|id), data=log_twoLevel_time) # subjects (S) as random effect
-anova(m)
-
-#art.con(m, "targetLevel")
-art.con(m, "targetKey")
-
 
 log_twoLevel_time_summary_level <- log_twoLevel_time  %>%
   group_by(targetLevel) %>%
@@ -574,7 +518,7 @@ log_twoLevel_time_summary_level
 # line + dot (levels)
 twolevel_time_level <- ggplot(log_twoLevel_time_summary_level) +
   geom_pointrange( aes(x=reorder(targetLevel, desc(targetLevel)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
-  scale_y_continuous(lim=c(900,1800)) + 
+  scale_y_continuous(lim=c(900,1850)) + 
   coord_flip()
 
 twolevel_time_level
@@ -592,7 +536,7 @@ twolevel_time_level + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("time_twolevel_level.pdf", width = 4, height = 2)
+ggsave("2level_time_level.pdf", width = 4, height = 2)
 
 log_twoLevel_time_summary_key <- log_twoLevel_time  %>%
   group_by(targetKey) %>%
@@ -610,7 +554,7 @@ log_twoLevel_time_summary_key
 # line + dot (key)
 twolevel_time_key <- ggplot(log_twoLevel_time_summary_key) +
   geom_pointrange( aes(x=reorder(targetKey, desc(targetKey)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
-  scale_y_continuous(lim=c(900,1800)) + 
+  scale_y_continuous(lim=c(900,1850)) + 
   coord_flip()
 
 twolevel_time_key
@@ -628,16 +572,39 @@ twolevel_time_key + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("time_twolevel_key.pdf", width = 4, height = 8)
+ggsave("2level_time_key.pdf", width = 4, height = 8)
 ```
 
-Main effect on keys: "TODO"
+##### time analysis
+```{r warning=FALSE}
+m = aov(time_ave ~ targetLevel*targetKey, data=log_twoLevel_time) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+library(rcompanion)
+log_twoLevel_time$time_ave_trans = transformTukey(log_twoLevel_time$time_ave)
+
+m = aov(time_ave_trans ~ targetLevel*targetKey, data=log_twoLevel_time) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+library(ez) # for ezANOVA
+log_twoLevel_time$id = factor(log_twoLevel_time$id)
+m = ezANOVA(dv=time_ave_trans, within=c(targetLevel,targetKey), wid=id, data=log_twoLevel_time, return_aov = TRUE)
+m$Mauchly # p<.05 indicates a sphericity violation
+m$ANOVA # use if no violation
+
+pairwise.t.test(log_twoLevel_time$time_ave_trans, log_twoLevel_time$targetKey, paired=TRUE, p.adjust="holm")
+```
+
+Main effect on keys: A faster than SDFJKL;, SF; faster than KL, D faster than K
+
 
 ### 3 level
 
 #### accuracy
 ```{r warning=FALSE}
-log_threelevel_accuracy <- trial_log %>%
+log_threelevel_accuracy <- trial_log_filtered %>%
   filter(levelCounts == c("3")) %>%
   group_by(id, targetLevel, targetKey) %>%
   summarize(
@@ -672,18 +639,6 @@ log_threelevel_accuracy_summary %>% ggplot(
 ) +
   geom_pointrange(position = pd) 
 
-m = aov(accuracy_ave ~ targetLevel*targetKey, data=log_threelevel_accuracy) # make anova-type linear model
-shapiro.test(residuals(m))
-qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
-
-library(ARTool)
-log_threelevel_accuracy$id = factor(log_threelevel_accuracy$id) # Subject id must be nominal
-m = art(accuracy_ave ~ targetLevel*targetKey + (1|id), data=log_threelevel_accuracy) # subjects (S) as random effect
-anova(m)
-
-art.con(m, "targetLevel")
-art.con(m, "targetKey")
-# art.con(m, "targetLevel:targetKey")
 
 log_threelevel_accuracy_summary_level <- log_threelevel_accuracy  %>%
   group_by(targetLevel) %>%
@@ -719,7 +674,7 @@ threelevel_accuracy_level + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("accuracy_threelevel_level.pdf", width = 4, height = 3)
+ggsave("3level_accuracy_level.pdf", width = 4, height = 3)
 
 log_threelevel_accuracy_summary_key <- log_threelevel_accuracy  %>%
   group_by(targetKey) %>%
@@ -755,99 +710,41 @@ threelevel_accuracy_key + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("accuracy_threelevel_key.pdf", width = 4, height = 8)
+ggsave("3level_accuracy_key.pdf", width = 4, height = 8)
 ```
 
+
+
+#### accuracy analysis
+```{r warning=FALSE}
+m = aov(accuracy_ave ~ targetLevel*targetKey, data=log_threelevel_accuracy) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+plotNormalHistogram(log_threelevel_accuracy$accuracy_ave)
+
+library(lme4)
+library(lmerTest)
+library(car)
+
+log_threelevel_accuracy$id = factor(log_threelevel_accuracy$id)
+contrasts(log_threelevel_accuracy$targetLevel) <-"contr.sum"
+contrasts(log_threelevel_accuracy$targetKey) <-"contr.sum"
+m = glmer(accuracy_ave ~ targetLevel*targetKey + (1|id), data=log_threelevel_accuracy, family=poisson)
+# use family=quasipoissonif overdispersion
+Anova(m, type=3)
+
+library(multcomp) # for glht
+library(emmeans) # for emm, emmeans
+summary(glht(m, emm(pairwise ~ targetLevel)), test=adjusted(type="holm"))
+
+```
 Main effect on targetLevel: Full has higher accuracy then medium and light; Medium has higher accuracy then light.
-Main effect on targetKey: J has higher accuracy than A, S, D, F, L, Semicolon
-Interaction: "TODO"
 
-#### actual press - user threshold
-```{r warning=FALSE}
-
-log_threelevel <- trial_log %>%
-  filter(levelCounts == c("3"))
-
-log_threelevel_user <- log_threelevel %>% 
-  group_by(id, targetLevel) %>% 
-  mutate(
-    pressRawPercent = pressedRaw * 100.0 / 255.0,
-  ) %>% 
-  ungroup()
-
-log_threelevel_user_quantile <- log_threelevel_user%>%
-  group_by(id, targetLevel) %>%
-  summarize(
-    lower_outlier = boxplot.stats(pressedRaw)$stats[c(1)],
-    lower = boxplot.stats(pressedRaw)$stats[c(2)],
-    median = boxplot.stats(pressedRaw)$stats[c(3)],
-    upper = boxplot.stats(pressedRaw)$stats[c(4)],
-    upper_outlier = boxplot.stats(pressedRaw)$stats[c(5)],
-  ) %>%
-  ungroup() %>%
-  arrange(id, targetLevel)
-
-library(reshape2) # for dcast
-
-melted_threshold <- melt(log_threelevel_user_quantile, id.vars = c("id", "targetLevel"), measure.vars = c("lower_outlier", "lower", "median", "upper", "upper_outlier"))
-cast_threshold <- dcast(melted_threshold, id~targetLevel * variable, value.var="value") %>% 
-  group_by(id) %>%
-  mutate(
-    full_threshold =  median(c(full_lower_outlier, full_lower,medium_upper, medium_upper_outlier)),
-    medium_threshold =  median(c(medium_lower_outlier, medium_lower,light_upper, light_upper_outlier)),
-  ) %>%
-  ungroup()
-
-log_threelevel_user <- merge(log_threelevel_user, cast_threshold,
-                          by = 'id', all = TRUE)
-
-log_threelevel_user <- log_threelevel_user %>% 
-  mutate(
-    pressLevel_user = ifelse(pressedRaw >= full_threshold, "full", ifelse(pressedRaw >= medium_threshold, "medium", "light")),
-    isSuccessful_user = (targetLevel == pressLevel_user)
-  )
-
-
-log_threelevel_user %>% ggplot(
-  aes(
-    x = targetLevel,
-    y = pressRawPercent
-  )
-) + 
-  geom_violin() + 
-  geom_boxplot(width = 0.03, outlier.shape = 1, , outlier.alpha = 0.3)
-
-```
-
-
-##### confusion table
-```{r warning=FALSE}
-library(cvms)
-conf_mat <- confusion_matrix(targets = log_threelevel_user$targetLevel,
-                             predictions = log_threelevel_user$pressedLevel)
-
-conf_mat
-
-plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
-  add_normalized = FALSE,
-  add_row_percentages = FALSE,
-  class_order = c("full", "medium", "light"))
-
-conf_mat <- confusion_matrix(targets = log_threelevel_user$targetLevel,
-                             predictions = log_threelevel_user$pressLevel_user)
-
-conf_mat
-
-plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
-  add_normalized = FALSE,
-  add_row_percentages = FALSE,
-  class_order = c("full", "medium", "light"))
-
-```
 
 #### time
 ```{r warning=FALSE}
-log_threeLevel_time <- log_time_filtered%>%
+log_threeLevel_time <- trial_log_filtered%>%
   filter(levelCounts == c("3")) %>%
   group_by(id, targetLevel, targetKey) %>%
   summarize(
@@ -882,17 +779,6 @@ log_threeLevel_time_summary %>% ggplot(
 ) +
   geom_pointrange(position = pd) 
 
-m = aov(time_ave ~ targetLevel*targetKey, data=log_threeLevel_time) # make anova-type linear model
-shapiro.test(residuals(m))
-qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
-
-library(ARTool)
-log_threeLevel_time$id = factor(log_threeLevel_time$id) # Subject id must be nominal
-m = art(time_ave ~ targetLevel*targetKey + (1|id), data=log_threeLevel_time) # subjects (S) as random effect
-anova(m)
-
-art.con(m, "targetLevel")
-art.con(m, "targetKey")
 
 log_threeLevel_time_summary_level <- log_threeLevel_time  %>%
   group_by(targetLevel) %>%
@@ -910,7 +796,7 @@ log_threeLevel_time_summary_level
 # line + dot (levels)
 threelevel_time_level <- ggplot(log_threeLevel_time_summary_level) +
   geom_pointrange( aes(x=reorder(targetLevel, desc(targetLevel)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
-  scale_y_continuous(lim=c(900,1800)) + 
+  scale_y_continuous(lim=c(900,1850)) + 
   coord_flip()
 
 threelevel_time_level
@@ -928,7 +814,7 @@ threelevel_time_level + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("time_threelevel_level.pdf", width = 4, height = 3)
+ggsave("3level_time_level.pdf", width = 4, height = 3)
 
 
 log_threeLevel_time_summary_key <- log_threeLevel_time  %>%
@@ -947,7 +833,7 @@ log_threeLevel_time_summary_key
 # line + dot (key)
 threelevel_time_key <- ggplot(log_threeLevel_time_summary_key) +
   geom_pointrange( aes(x=reorder(targetKey, desc(targetKey)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
-  scale_y_continuous(lim=c(900,1800)) + 
+  scale_y_continuous(lim=c(900,1850)) + 
   coord_flip()
 
 threelevel_time_key
@@ -965,17 +851,59 @@ threelevel_time_key + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("time_threelevel_key.pdf", width = 4, height = 8)
+ggsave("3level_time_key.pdf", width = 4, height = 8)
+```
+
+
+#### time
+```{r warning=FALSE}
+m = aov(time_ave ~ targetLevel*targetKey, data=log_threeLevel_time) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+library(rcompanion)
+log_threeLevel_time$time_ave_trans = transformTukey(log_threeLevel_time$time_ave)
+
+m = aov(time_ave_trans ~ targetLevel*targetKey, data=log_threeLevel_time) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+
+library(ez) # for ezANOVA
+log_threeLevel_time$id = factor(log_threeLevel_time$id)
+m = ezANOVA(dv=time_ave_trans, within=c(targetLevel,targetKey), wid=id, data=log_threeLevel_time)
+m$Mauchly # p<.05 indicates a sphericity violation
+m$Sphericity
+m$ANOVA # use if no violation
+
+pairwise.t.test(log_threeLevel_time$time_ave_trans, log_threeLevel_time$targetLevel, paired=TRUE, p.adjust="holm")
+pairwise.t.test(log_threeLevel_time$time_ave_trans, log_threeLevel_time$targetKey, paired=TRUE, p.adjust="holm")
+pairwise.t.test(log_threeLevel_time$time_ave_trans, interaction(log_threeLevel_time$targetKey, log_threeLevel_time$targetLevel), paired=TRUE, p.adjust="holm")
+
+# library(ARTool)
+# log_threeLevel_time$id = factor(log_threeLevel_time$id) # Subject id must be nominal
+# m = art(time_ave ~ targetLevel*targetKey + (1|id), data=log_threeLevel_time) # subjects (S) as random effect
+# anova(m)
+# 
+# art.con(m, "targetLevel")
+# art.con(m, "targetKey")
+# art.con(m, "targetLevel:targetKey")
 ```
 
 Main effect on targetLevel: full and light is faster than medium
+
 Main effect on targetKey: (AS) faster than (DFJKL;), (DF;) faster than (KL), J faster than K
+
+Main interaction: For full, A faster than DKL
+
+For medium, S faster than FJKL
+
+For light, A faster than KL
 
 ### 4 level
 
 #### accuracy
 ```{r warning=FALSE}
-log_fourlevel_accuracy <- trial_log %>%
+log_fourlevel_accuracy <- trial_log_filtered %>%
   filter(levelCounts == c("4")) %>%
   group_by(id, targetLevel, targetKey) %>%
   summarize(
@@ -1010,17 +938,7 @@ log_fourlevel_accuracy_summary %>% ggplot(
 ) +
   geom_pointrange(position = pd) 
 
-m = aov(accuracy_ave ~ targetLevel*targetKey, data=log_fourlevel_accuracy) # make anova-type linear model
-shapiro.test(residuals(m))
-qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 
-library(ARTool)
-log_fourlevel_accuracy$id = factor(log_fourlevel_accuracy$id) # Subject id must be nominal
-m = art(accuracy_ave ~ targetLevel*targetKey + (1|id), data=log_fourlevel_accuracy) # subjects (S) as random effect
-anova(m)
-
-art.con(m, "targetLevel")
-art.con(m, "targetKey")
 
 log_fourlevel_accuracy_summary_level <- log_fourlevel_accuracy  %>%
   group_by(targetLevel) %>%
@@ -1056,7 +974,7 @@ fourlevel_accuracy_level + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("accuracy_fourlevel_level.pdf", width = 4, height = 4)
+ggsave("4level_accuracy_level.pdf", width = 4, height = 4)
 
 log_fourlevel_accuracy_summary_key <- log_fourlevel_accuracy  %>%
   group_by(targetKey) %>%
@@ -1092,101 +1010,49 @@ fourlevel_accuracy_key + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("accuracy_fourlevel_key.pdf", width = 4, height = 8)
+ggsave("4level_accuracy_key.pdf", width = 4, height = 8)
 
 ```
 
-Main effect on targetLevel: Full has highest accuracy; MediumHigh has lowest accuracy; Light higher than MediumLow
-Main effect on targetKey: J higher than ASDKL, F higher than L
 
-
-#### actual press - user threshold
+##### accuracy analysis
 ```{r warning=FALSE}
-log_fourlevel <- trial_log %>%
-  filter(levelCounts == c("4"))
+m = aov(accuracy_ave ~ targetLevel*targetKey, data=log_fourlevel_accuracy) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
+plotNormalHistogram(log_fourlevel_accuracy$accuracy_ave)
 
-log_fourlevel_user <- log_fourlevel %>% 
-  group_by(id, targetLevel) %>% 
-  mutate(
-    pressRawPercent = pressedRaw * 100.0 / 255.0,
-  ) %>% 
-  ungroup()
+library(lme4)
+library(lmerTest)
+library(car)
 
-log_fourlevel_user_quantile <- log_fourlevel_user%>%
-  group_by(id, targetLevel) %>%
-  summarize(
-    lower_outlier = boxplot.stats(pressedRaw)$stats[c(1)],
-    lower = boxplot.stats(pressedRaw)$stats[c(2)],
-    median = boxplot.stats(pressedRaw)$stats[c(3)],
-    upper = boxplot.stats(pressedRaw)$stats[c(4)],
-    upper_outlier = boxplot.stats(pressedRaw)$stats[c(5)],
-  ) %>%
-  ungroup() %>%
-  arrange(id, targetLevel)
+log_fourlevel_accuracy$id = factor(log_fourlevel_accuracy$id)
+contrasts(log_fourlevel_accuracy$targetLevel) <-"contr.sum"
+contrasts(log_fourlevel_accuracy$targetKey) <-"contr.sum"
+m = glmer(accuracy_ave ~ targetLevel*targetKey + (1|id), data=log_fourlevel_accuracy, family=poisson)
+# use family=quasipoissonif overdispersion
+Anova(m, type=3)
 
-library(reshape2) # for dcast
-
-melted_threshold <- melt(log_fourlevel_user_quantile, id.vars = c("id", "targetLevel"), measure.vars = c("lower_outlier", "lower", "median", "upper", "upper_outlier"))
-cast_threshold <- dcast(melted_threshold, id~targetLevel * variable, value.var="value") %>% 
-  group_by(id) %>%
-  mutate(
-    full_threshold =  median(c(full_lower_outlier, full_lower,mediumHigh_upper, mediumHigh_upper_outlier)),
-    mediumHigh_threshold =  median(c(mediumHigh_lower_outlier, mediumHigh_lower,mediumLow_upper, mediumLow_upper_outlier)),
-    mediumLow_threshold =  median(c(mediumLow_lower_outlier, mediumLow_lower,light_upper, light_upper_outlier)),
-  ) %>%
-  ungroup()
-
-log_fourlevel_user <- merge(log_fourlevel_user, cast_threshold,
-                          by = 'id', all = TRUE)
-
-log_fourlevel_user <- log_fourlevel_user %>% 
-  mutate(
-    pressLevel_user = ifelse(pressedRaw >= full_threshold, "full", ifelse(pressedRaw >= mediumHigh_threshold, "mediumHigh", ifelse(pressedRaw >= mediumLow_threshold, "mediumLow", "light"))),
-    isSuccessful_user = (targetLevel == pressLevel_user)
-  )
+library(multcomp) # for glht
+library(emmeans) # for emm, emmeans
+summary(glht(m, emm(pairwise ~ targetLevel)), test=adjusted(type="holm"))
 
 
-log_fourlevel_user %>% ggplot(
-  aes(
-    x = targetLevel,
-    y = pressRawPercent
-  )
-) + 
-  geom_violin() + 
-  geom_boxplot(width = 0.03, outlier.shape = 1, , outlier.alpha = 0.3)
-
+# library(ARTool)
+# log_fourlevel_accuracy$id = factor(log_fourlevel_accuracy$id) # Subject id must be nominal
+# m = art(accuracy_ave ~ targetLevel*targetKey + (1|id), data=log_fourlevel_accuracy) # subjects (S) as random effect
+# anova(m)
+# 
+# art.con(m, "targetLevel")
+# art.con(m, "targetKey")
+# art.con(m, "targetLevel:targetKey")
 ```
+Main effect on targetLevel: Full has highest accuracy; MediumHigh has lowest accuracy
 
-
-##### confusion table
-```{r warning=FALSE}
-library(cvms)
-conf_mat <- confusion_matrix(targets = log_fourlevel_user$targetLevel,
-                             predictions = log_fourlevel_user$pressedLevel)
-
-conf_mat
-
-plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
-  add_normalized = FALSE,
-  add_row_percentages = FALSE,
-  class_order = c("full", "mediumHigh", "mediumLow", "light"))
-
-conf_mat <- confusion_matrix(targets = log_fourlevel_user$targetLevel,
-                             predictions = log_fourlevel_user$pressLevel_user)
-
-conf_mat
-
-plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
-  add_normalized = FALSE,
-  add_row_percentages = FALSE,
-  class_order = c("full", "mediumHigh", "mediumLow", "light"))
-
-
-```
 
 #### time
 ```{r warning=FALSE}
-log_fourLevel_time <- log_time_filtered%>%
+log_fourLevel_time <- trial_log_filtered%>%
   filter(levelCounts == c("4")) %>%
   group_by(id, targetLevel, targetKey) %>%
   summarize(
@@ -1221,18 +1087,6 @@ log_fourLevel_time_summary %>% ggplot(
 ) +
   geom_pointrange(position = pd) 
 
-m = aov(time_ave ~ targetLevel*targetKey, data=log_fourLevel_time) # make anova-type linear model
-shapiro.test(residuals(m))
-qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
-
-library(ARTool)
-log_fourLevel_time$id = factor(log_fourLevel_time$id) # Subject id must be nominal
-m = art(time_ave ~ targetLevel*targetKey + (1|id), data=log_fourLevel_time) # subjects (S) as random effect
-anova(m)
-
-art.con(m, "targetLevel")
-art.con(m, "targetKey")
-
 log_fourLevel_time_summary_level <- log_fourLevel_time  %>%
   group_by(targetLevel) %>%
   summarize(
@@ -1249,7 +1103,7 @@ log_fourLevel_time_summary_level
 # line + dot (levels)
 fourlevel_time_level <- ggplot(log_fourLevel_time_summary_level) +
   geom_pointrange( aes(x=reorder(targetLevel, desc(targetLevel)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
-  scale_y_continuous(lim=c(900,1800)) + 
+  scale_y_continuous(lim=c(900,1850)) + 
   coord_flip()
 
 fourlevel_time_level
@@ -1267,7 +1121,7 @@ fourlevel_time_level + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("time_fourlevel_level.pdf", width = 4, height = 4)
+ggsave("4level_time_level.pdf", width = 4, height = 4)
 
 
 log_fourLevel_time_summary_key <- log_fourLevel_time  %>%
@@ -1286,7 +1140,7 @@ log_fourLevel_time_summary_key
 # line + dot (key)
 fourlevel_time_key <- ggplot(log_fourLevel_time_summary_key) +
   geom_pointrange( aes(x=reorder(targetKey, desc(targetKey)), y=meanTime, ymin=lowCITime, ymax=highCITime), colour="#707b7c", alpha=0.9, size=0.8) +
-  scale_y_continuous(lim=c(900,1800)) + 
+  scale_y_continuous(lim=c(900,1850)) + 
   coord_flip()
 
 fourlevel_time_key
@@ -1304,76 +1158,49 @@ fourlevel_time_key + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("time_fourlevel_key.pdf", width = 4, height = 8)
+ggsave("4level_time_key.pdf", width = 4, height = 8)
 ```
 
-Main effect on targetLevel: (full, light) faster than (mediumHigh, mediumLow), mediumLow faster than mediumHigh
-Main effect on targetKey: (AS) faster than (DFJKL;), (F;) faster than (KL), D faster than L
 
-
-### Accuracy levelcount - user
+#### time analysis
 ```{r warning=FALSE}
+m = aov(time_ave ~ targetLevel*targetKey, data=log_fourLevel_time) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 
-log_fourlevel_user_accuracy <- log_fourlevel_user %>%
-  dplyr::select(id:isSuccessful, pressLevel_user, isSuccessful_user)
+library(rcompanion)
+log_fourLevel_time$time_ave_trans = transformTukey(log_fourLevel_time$time_ave)
 
-log_threelevel_user_accuracy <- log_threelevel_user %>%
-  dplyr::select(id:isSuccessful, pressLevel_user, isSuccessful_user)
+m = aov(time_ave_trans ~ targetLevel*targetKey, data=log_fourLevel_time) # make anova-type linear model
+shapiro.test(residuals(m))
+qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 
-log_twolevel_user_accuracy <- log_twolevel_user %>%
-  dplyr::select(id:isSuccessful, pressLevel_user, isSuccessful_user)
+library(ez) # for ezANOVA
+log_fourLevel_time$id = factor(log_fourLevel_time$id)
+m = ezANOVA(dv=time_ave_trans, within=c(targetLevel,targetKey), wid=id, data=log_fourLevel_time)
+m$Mauchly # p<.05 indicates a sphericity violation
+m$Sphericity
+m$ANOVA # use if no violation
 
-log_user = bind_rows(log_twolevel_user_accuracy,log_threelevel_user_accuracy, log_fourlevel_user_accuracy)
-
-log_defult_accuracy <- log_user %>%
-  group_by(id, levelCounts) %>%
-  summarize(
-    accuracy_ave = sum(isSuccessful) / n(),
-    n_trials = n()
-  ) %>%
-  mutate(
-    method = "default"
-  ) %>%
-  ungroup() %>%
-  arrange(id, levelCounts)
-  
-log_user_accuracy <- log_user %>%
-  group_by(id, levelCounts) %>%
-  summarize(
-    accuracy_ave = sum(isSuccessful_user) / n(),
-    n_trials = n()
-  ) %>%
-  mutate(
-    method = "user"
-  ) %>%
-  ungroup() %>%
-  arrange(id, levelCounts)
-  
-log_accuracy = bind_rows(log_defult_accuracy, log_user_accuracy)
+pairwise.t.test(log_fourLevel_time$time_ave_trans, log_fourLevel_time$targetLevel, paired=TRUE, p.adjust="holm")
+pairwise.t.test(log_fourLevel_time$time_ave_trans, log_fourLevel_time$targetKey, paired=TRUE, p.adjust="holm")
+pairwise.t.test(log_fourLevel_time$time_ave_trans, interaction(log_fourLevel_time$targetKey, log_fourLevel_time$targetLevel), paired=TRUE, p.adjust="holm")
 
 
-log_accuracy_summary <- log_accuracy  %>%
-  group_by(levelCounts, method) %>%
-  summarize(
-    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
-    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
-    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
-    sdAccuracy = ci(accuracy_ave)[4],
-    stdAccuracy = sd(accuracy_ave)) %>%
-  ungroup() %>%
-  arrange(method, levelCounts)
-
-log_accuracy_summary
-
-pd <- position_dodge(width = 0.3)
-log_accuracy_summary %>% ggplot(
-  aes(
-    x = levelCounts,
-    y = meanAccuracy,
-    ymin = lowCIAccuracy,
-    ymax = highCIAccuracy,
-    color = method
-  )
-) +
-  geom_pointrange(position = pd) 
+# library(ARTool)
+# log_fourLevel_time$id = factor(log_fourLevel_time$id) # Subject id must be nominal
+# m = art(time_ave ~ targetLevel*targetKey + (1|id), data=log_fourLevel_time) # subjects (S) as random effect
+# anova(m)
+# 
+# art.con(m, "targetLevel")
+# art.con(m, "targetKey")
+# art.con(m, "targetLevel:targetKey")
 ```
+Main effect on targetLevel: all pairs have difference 
+
+Main effect on targetKey: (AS) faster than (DFJKL;), (DF;) faster than (L), F faster than JK
+
+Main interaction: for Full, ASF is faster than KL, A is faster than D
+
+for Light, AS is faster than KL, F; is faster than L 
+

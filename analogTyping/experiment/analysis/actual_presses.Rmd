@@ -1,0 +1,790 @@
+---
+title: "trial results"
+author: "Allen Yeh"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```
+```
+
+```{r warning=FALSE}
+library(tidyverse)
+library(gmodels)
+library(rstatix)
+library(ggplot2)
+library(ez)
+
+#increase print limit to 2500 values
+options(max.print=3000)
+```
+
+### Import data
+
+#### Read the csv file and claim the data type
+```{r}
+ 
+participant_id = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "40", "23", "24")
+
+key_code = c("A", "S", "D", "F", "J", "K", "L", "Semicolon")
+
+level_code = c("full", "mediumHigh", "mediumLow", "medium", "light")
+level_cols <- c("full" = "#922B21", "mediumHigh" = "#1F618D", "mediumLow" = "#1E8449", "medium" = "#1E8449", "light" = "#B7950B")
+
+# Initialize an empty data frame
+trial_log = NULL
+
+for (x in participant_id) {
+  filename <- paste("./../results/", x, ".csv", sep="")
+  trial_user_log <- read_csv(filename, col_types = cols(
+    id = col_factor(levels = participant_id),
+    level = col_integer(),
+    block = col_factor(levels = c("0", "1", "2", "3", "4", "5")),
+    trial = col_integer(),
+    levelCounts = col_factor(levels = c("2", "3", "4")),
+    targetKey = col_factor(levels = key_code),
+    targetLevel = col_factor(levels = level_code),
+    pressedLevel = col_factor(levels = level_code),
+    pressedRaw = col_integer(),
+    isSuccessful = col_logical(),
+    startTime = col_double(),
+    endTime = col_double(),
+    time = col_double(),
+  )) %>% filter(block %in% c("1", "2", "3", "4", "5"))
+  trial_log = bind_rows(trial_log,trial_user_log)
+}
+
+
+```
+
+### functions
+
+```{r warning=FALSE}
+percent <- function(num, digits = 2, ...) {      
+  percentage <-formatC(num * 100, format = "f", digits = digits, ...)
+  
+  # appending "%" symbol at the end of
+  # calculate percentage value
+  paste0(percentage, "%")
+}
+
+INT <- function(x){
+    qnorm((rank(x) - 0.5)/length(x))
+}
+```
+
+### Filter outlier with time
+```{r warning = FALSE}
+trial_log_filtered <- trial_log %>% 
+  group_by(id, levelCounts) %>% 
+  mutate(IQR = IQR(time),
+            O_upper = quantile(time, probs=c( .75), na.rm = FALSE)+1.5*IQR,  
+            O_lower = quantile(time, probs=c( .25), na.rm = FALSE)-1.5*IQR  
+  ) %>% 
+  filter(O_lower <= time & time <= O_upper)%>% 
+  ungroup()
+```
+
+Total 437 trials (5.1%) got removed.
+
+```{r warning=FALSE}
+trial_log_filtered <- trial_log_filtered %>%
+  filter(block != c("1"))
+```
+
+Remove the first block due to learning effect.
+
+### Two levels
+#### actual press - user threshold
+```{r warning=FALSE}
+log_twolevel <- trial_log_filtered %>%
+  filter(levelCounts == c("2"))
+
+log_twolevel_user <- log_twolevel %>% 
+  group_by(id, targetLevel) %>% 
+  mutate(
+    pressRawPercent = pressedRaw * 100.0 / 255.0,
+  ) %>% 
+  ungroup()
+
+log_twolevel_user_dist <- log_twolevel_user %>% 
+  group_by(id, targetLevel) %>% 
+  summarize(
+    press_ave = sum(pressRawPercent) / n(),
+    n_trials = n()
+  )%>%
+  ungroup()
+
+log_twolevel_user_dist
+
+log_twolevel_user_level_summary <- log_twolevel_user_dist  %>%
+  group_by(targetLevel) %>%
+  summarize(
+    meanDist = press_ave %>% mean(na.rm=TRUE),
+    lowCIDist = ci(press_ave)[2] %>% pmax(0),
+    highCIDist = ci(press_ave)[3] %>% pmin(100),
+    sdDist = ci(press_ave)[4],
+    stdDist = sd(press_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel)
+
+log_twolevel_user_level_summary
+
+log_twolevel_user_quantile <- log_twolevel_user%>%
+  group_by(id, targetLevel) %>%
+  summarize(
+    lower_outlier = boxplot.stats(pressedRaw)$stats[c(1)],
+    lower = boxplot.stats(pressedRaw)$stats[c(2)],
+    median = boxplot.stats(pressedRaw)$stats[c(3)],
+    upper = boxplot.stats(pressedRaw)$stats[c(4)],
+    upper_outlier = boxplot.stats(pressedRaw)$stats[c(5)],
+  ) %>%
+  ungroup() %>%
+  arrange(id, targetLevel)
+
+library(reshape2) # for dcast
+
+melted_threshold <- melt(log_twolevel_user_quantile, id.vars = c("id", "targetLevel"), measure.vars = c("lower_outlier", "lower", "median", "upper", "upper_outlier"))
+
+#melted_threshold
+
+cast_threshold <- dcast(melted_threshold, id~targetLevel * variable, value.var="value")%>%
+  group_by(id) %>%
+  mutate(
+    full_threshold = median(c(full_lower_outlier, full_lower,light_upper, light_upper_outlier)),
+    full_threshold_percent = full_threshold * 100.0 / 255.0,
+  ) %>%
+  ungroup()
+
+twolevel_threshold_summary <- cast_threshold  %>%
+  summarize(
+    meanFullThreshold = full_threshold_percent %>% mean(na.rm=TRUE),
+    lowCIFullThreshold = ci(full_threshold_percent)[2] %>% pmax(0),
+    highCIFullThreshold = ci(full_threshold_percent)[3],
+    sdFullThreshold = ci(full_threshold_percent)[4],
+    stdFullThreshold = sd(full_threshold_percent))
+
+twolevel_threshold_summary
+
+log_twolevel_user <- merge(log_twolevel_user, cast_threshold,
+                          by = 'id', all = TRUE)
+
+log_twolevel_user <- log_twolevel_user %>% 
+  mutate(
+    pressLevel_user = ifelse(pressedRaw >= full_threshold, "full", "light"),
+    isSuccessful_user = (targetLevel == pressLevel_user)
+  )
+
+#log_twolevel_user
+
+
+twolovel_user_press <- ggplot(log_twolevel_user,
+  aes(
+    x = targetLevel,
+    y = pressRawPercent
+  )
+) + 
+  scale_y_continuous(lim=c(0,100), breaks = seq(0, 100, by = 20) )  +
+  geom_hline(yintercept=5, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=35, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=70, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=98, linetype="dashed", color = "#5D6D7E")+ 
+  geom_violin(fill="#52BE80", scale = "count", width = 1.5, position=position_dodge())+ 
+  geom_boxplot(width = 0.06, outliers = FALSE, fill="#E5E7E9") + 
+  coord_flip()
+
+twolovel_user_press
+
+twolovel_user_press + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("2level_violin.pdf", width = 4, height = 4)
+
+
+```
+
+##### confusion table
+```{r warning=FALSE}
+library(cvms)
+conf_mat <- confusion_matrix(targets = log_twolevel_user$targetLevel,
+                             predictions = log_twolevel_user$pressedLevel)
+
+conf_mat
+
+twolovel_confusion <- plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
+  add_normalized = FALSE,
+  add_row_percentages = FALSE)
+
+twolovel_confusion
+
+twolovel_confusion + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_blank() ,
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("2level_confusion.pdf", width = 4, height = 4)
+
+conf_mat <- confusion_matrix(targets = log_twolevel_user$targetLevel,
+                             predictions = log_twolevel_user$pressLevel_user)
+
+conf_mat
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
+  add_normalized = FALSE,
+  add_row_percentages = FALSE)
+
+```
+
+#### Each user
+```{r warning=FALSE}
+
+twolovel_each_user_press <- ggplot(log_twolevel_user,
+  aes(
+    x = reorder(id, desc(id)),
+    y = pressRawPercent,
+    color = targetLevel,
+  )
+) + 
+  scale_y_continuous(lim=c(0,100), breaks = seq(0, 100, by = 20) )  +
+  scale_colour_manual(values=level_cols)+
+  geom_hline(yintercept=5, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=35, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=70, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=98, linetype="dashed", color = "#5D6D7E")+ 
+  geom_boxplot(outliers = FALSE, fill=NA, position=position_identity(), alpha = 0.7, width = 0.6) + 
+  coord_flip()
+  
+
+twolovel_each_user_press
+
+twolovel_each_user_press + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank(),
+          legend.position="none",
+    )
+
+ggsave("2level_user.pdf", width = 4, height = 12)
+
+```
+
+
+### Three levels
+#### actual press - user threshold
+```{r warning=FALSE}
+
+log_threelevel <- trial_log_filtered %>%
+  filter(levelCounts == c("3"))
+
+log_threelevel_user <- log_threelevel %>% 
+  group_by(id, targetLevel) %>% 
+  mutate(
+    pressRawPercent = pressedRaw * 100.0 / 255.0,
+  )  %>%
+  ungroup()
+
+log_threelevel_user_dist <- log_threelevel_user %>% 
+  group_by(id, targetLevel) %>% 
+  summarize(
+    press_ave = sum(pressRawPercent) / n(),
+    n_trials = n()
+  )%>%
+  mutate(
+    press_ave_mm = press_ave * 4.0 / 100.0,
+  )  %>%
+  ungroup()
+
+log_threelevel_user_dist
+
+log_threelevel_user_level_summary <- log_threelevel_user_dist  %>%
+  group_by(targetLevel) %>%
+  summarize(
+    meanDist = press_ave_mm %>% mean(na.rm=TRUE),
+    lowCIDist = ci(press_ave_mm)[2] %>% pmax(0),
+    highCIDist = ci(press_ave_mm)[3] %>% pmin(100),
+    sdDist = ci(press_ave_mm)[4],
+    stdDist = sd(press_ave_mm)) %>%
+  ungroup() %>%
+  arrange(targetLevel)
+
+log_threelevel_user_level_summary
+
+log_threelevel_user_quantile <- log_threelevel_user%>%
+  group_by(id, targetLevel) %>%
+  summarize(
+    lower_outlier = boxplot.stats(pressedRaw)$stats[c(1)],
+    lower = boxplot.stats(pressedRaw)$stats[c(2)],
+    median = boxplot.stats(pressedRaw)$stats[c(3)],
+    upper = boxplot.stats(pressedRaw)$stats[c(4)],
+    upper_outlier = boxplot.stats(pressedRaw)$stats[c(5)],
+  ) %>%
+  ungroup() %>%
+  arrange(id, targetLevel)
+
+library(reshape2) # for dcast
+
+melted_threshold <- melt(log_threelevel_user_quantile, id.vars = c("id", "targetLevel"), measure.vars = c("lower_outlier", "lower", "median", "upper", "upper_outlier"))
+cast_threshold <- dcast(melted_threshold, id~targetLevel * variable, value.var="value") %>% 
+  group_by(id) %>%
+  mutate(
+    full_threshold =  median(c(full_lower_outlier, full_lower,medium_upper, medium_upper_outlier)),
+    full_threshold_percent = full_threshold * 100.0 / 255.0,
+    medium_threshold =  median(c(medium_lower_outlier, medium_lower,light_upper, light_upper_outlier)),
+    medium_threshold_percent = medium_threshold * 100.0 / 255.0,
+    
+  ) %>%
+  ungroup()
+
+threelevel_threshold_summary <- cast_threshold  %>%
+  summarize(
+    meanFullThreshold = full_threshold_percent %>% mean(na.rm=TRUE),
+    lowCIFullThreshold = ci(full_threshold_percent)[2] %>% pmax(0),
+    highCIFullThreshold = ci(full_threshold_percent)[3] %>% pmin(255),
+    sdFullThreshold = ci(full_threshold_percent)[4],
+    stdFullThreshold = sd(full_threshold_percent),
+    meanMediumThreshold = medium_threshold_percent %>% mean(na.rm=TRUE),
+    lowCIMediumThreshold = ci(medium_threshold_percent)[2] %>% pmax(0),
+    highCIMediumThreshold = ci(medium_threshold_percent)[3] %>% pmin(255),,
+    sdMediumThreshold = ci(medium_threshold_percent)[4],
+    stdMediumThreshold = sd(medium_threshold_percent))
+
+threelevel_threshold_summary
+
+log_threelevel_user <- merge(log_threelevel_user, cast_threshold,
+                          by = 'id', all = TRUE)
+
+log_threelevel_user <- log_threelevel_user %>% 
+  mutate(
+    pressLevel_user = ifelse(pressedRaw >= full_threshold, "full", ifelse(pressedRaw >= medium_threshold, "medium", "light")),
+    isSuccessful_user = (targetLevel == pressLevel_user)
+  )
+
+
+threelovel_user_press <- ggplot(log_threelevel_user,
+  aes(
+    x = targetLevel,
+    y = pressRawPercent
+  )
+) + 
+  scale_y_continuous(lim=c(0,100), breaks = seq(0, 100, by = 20) )  +
+  geom_hline(yintercept=5, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=35, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=70, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=98, linetype="dashed", color = "#5D6D7E")+ 
+  geom_violin(fill="#52BE80", scale = "count", width = 1.5, position=position_dodge())+ 
+  geom_boxplot(width = 0.06, outliers = FALSE, fill="#E5E7E9")  + 
+  coord_flip()
+
+threelovel_user_press
+
+threelovel_user_press + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_line( size=.1, color="gray" ),
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_blank() ,
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("3level_violin.pdf", width = 4, height = 4)
+
+```
+
+
+##### confusion table
+```{r warning=FALSE}
+library(cvms)
+conf_mat <- confusion_matrix(targets = log_threelevel_user$targetLevel,
+                             predictions = log_threelevel_user$pressedLevel)
+
+conf_mat
+
+threelevel_confusion <- plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
+  add_normalized = FALSE,
+  add_row_percentages = FALSE,
+  class_order = c("full", "medium", "light"))
+
+threelevel_confusion
+
+threelevel_confusion + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_blank() ,
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("3level_confusion.pdf", width = 4, height = 4)
+
+
+conf_mat <- confusion_matrix(targets = log_threelevel_user$targetLevel,
+                             predictions = log_threelevel_user$pressLevel_user)
+
+conf_mat
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
+  add_normalized = FALSE,
+  add_row_percentages = FALSE,
+  class_order = c("full", "medium", "light"))
+
+```
+
+
+#### Each user
+```{r warning=FALSE}
+
+threelovel_each_user_press <- ggplot(log_threelevel_user,
+  aes(
+    x = reorder(id, desc(id)),
+    y = pressRawPercent,
+    color = targetLevel,
+  )
+) + 
+  scale_y_continuous(lim=c(0,100), breaks = seq(0, 100, by = 20) )  +
+  scale_colour_manual(values = level_cols) + 
+  geom_hline(yintercept=5, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=35, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=70, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=98, linetype="dashed", color = "#5D6D7E")+ 
+  geom_boxplot(outliers = FALSE, fill=NA, position=position_identity(), alpha = 0.7, width = 0.6) + 
+  coord_flip()
+  
+
+threelovel_each_user_press
+
+threelovel_each_user_press + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank(),
+          legend.position="none",
+    )
+
+ggsave("3level_user.pdf", width = 4, height = 12)
+
+```
+
+
+### Four levels
+
+#### actual press - user threshold
+```{r warning=FALSE}
+log_fourlevel <- trial_log_filtered %>%
+  filter(levelCounts == c("4"))
+
+log_fourlevel_user <- log_fourlevel %>% 
+  group_by(id, targetLevel) %>% 
+  mutate(
+    pressRawPercent = pressedRaw * 100.0 / 255.0,
+  ) %>% 
+  ungroup()
+
+log_fourlevel_user_dist <- log_fourlevel_user %>% 
+  group_by(id, targetLevel) %>% 
+  summarize(
+    press_ave = sum(pressRawPercent) / n(),
+    n_trials = n()
+  )%>%
+  ungroup()
+
+log_fourlevel_user_dist
+
+log_fourlevel_user_level_summary <- log_fourlevel_user_dist  %>%
+  group_by(targetLevel) %>%
+  summarize(
+    meanDist = press_ave %>% mean(na.rm=TRUE),
+    lowCIDist = ci(press_ave)[2] %>% pmax(0),
+    highCIDist = ci(press_ave)[3] %>% pmin(100),
+    sdDist = ci(press_ave)[4],
+    stdDist = sd(press_ave)) %>%
+  ungroup() %>%
+  arrange(targetLevel)
+
+log_fourlevel_user_level_summary
+
+log_fourlevel_user_quantile <- log_fourlevel_user%>%
+  group_by(id, targetLevel) %>%
+  summarize(
+    lower_outlier = boxplot.stats(pressedRaw)$stats[c(1)],
+    lower = boxplot.stats(pressedRaw)$stats[c(2)],
+    median = boxplot.stats(pressedRaw)$stats[c(3)],
+    upper = boxplot.stats(pressedRaw)$stats[c(4)],
+    upper_outlier = boxplot.stats(pressedRaw)$stats[c(5)],
+  ) %>%
+  ungroup() %>%
+  arrange(id, targetLevel)
+
+library(reshape2) # for dcast
+
+melted_threshold <- melt(log_fourlevel_user_quantile, id.vars = c("id", "targetLevel"), measure.vars = c("lower_outlier", "lower", "median", "upper", "upper_outlier"))
+cast_threshold <- dcast(melted_threshold, id~targetLevel * variable, value.var="value") %>% 
+  group_by(id) %>%
+  mutate(
+    full_threshold =  median(c(full_lower_outlier, full_lower,mediumHigh_upper, mediumHigh_upper_outlier)),
+    full_threshold_percent = full_threshold * 100.0 / 255.0,
+    mediumHigh_threshold =  median(c(mediumHigh_lower_outlier, mediumHigh_lower,mediumLow_upper, mediumLow_upper_outlier)),
+    mediumHigh_threshold_percent = mediumHigh_threshold * 100.0 / 255.0,
+    mediumLow_threshold =  median(c(mediumLow_lower_outlier, mediumLow_lower,light_upper, light_upper_outlier)),
+    mediumLow_threshold_percent = mediumLow_threshold * 100.0 / 255.0,
+  ) %>%
+  ungroup()
+
+fourlevel_threshold_summary <- cast_threshold  %>%
+  summarize(
+    meanFullThreshold = full_threshold_percent %>% mean(na.rm=TRUE),
+    lowCIFullThreshold = ci(full_threshold_percent)[2] %>% pmax(0),
+    highCIFullThreshold = ci(full_threshold_percent)[3] %>% pmin(255),
+    sdFullThreshold = ci(full_threshold_percent)[4],
+    stdFullThreshold = sd(full_threshold_percent),
+    meanMediumHighThreshold = mediumHigh_threshold_percent %>% mean(na.rm=TRUE),
+    lowCIMediumHighThreshold = ci(mediumHigh_threshold_percent)[2] %>% pmax(0),
+    highCIMediumHighThreshold = ci(mediumHigh_threshold_percent)[3] %>% pmin(255),
+    sdMediumHighThreshold = ci(mediumHigh_threshold_percent)[4],
+    stdMediumHighThreshold = sd(mediumHigh_threshold_percent),
+    meanMediumLowThreshold = mediumLow_threshold_percent %>% mean(na.rm=TRUE),
+    lowCIMediumLowThreshold = ci(mediumLow_threshold_percent)[2] %>% pmax(0),
+    highCIMediumLowThreshold = ci(mediumLow_threshold_percent)[3] %>% pmin(255),
+    sdMediumLowThreshold = ci(mediumLow_threshold_percent)[4],
+    stdMediumLowThreshold = sd(mediumLow_threshold_percent))
+
+fourlevel_threshold_summary
+
+log_fourlevel_user <- merge(log_fourlevel_user, cast_threshold,
+                          by = 'id', all = TRUE)
+
+log_fourlevel_user <- log_fourlevel_user %>% 
+  mutate(
+    pressLevel_user = ifelse(pressedRaw >= full_threshold, "full", ifelse(pressedRaw >= mediumHigh_threshold, "mediumHigh", ifelse(pressedRaw >= mediumLow_threshold, "mediumLow", "light"))),
+    isSuccessful_user = (targetLevel == pressLevel_user)
+  )
+
+
+fourlovel_user_press <- ggplot(log_fourlevel_user,
+  aes(
+    x = targetLevel,
+    y = pressRawPercent
+  )
+) + 
+  scale_y_continuous(lim=c(0,100), breaks = seq(0, 100, by = 20) )  +
+  geom_hline(yintercept=5, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=35, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=70, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=98, linetype="dashed", color = "#5D6D7E")+ 
+  geom_violin(fill="#52BE80", scale = "count", width = 1.5, position=position_dodge())+ 
+  geom_boxplot(width = 0.06, outliers = FALSE, fill="#E5E7E9")   + 
+  coord_flip()
+
+
+fourlovel_user_press
+
+fourlovel_user_press + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_line( size=.1, color="gray" ),
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_blank() ,
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("4level_violin.pdf", width = 4, height = 4)
+
+```
+
+
+##### confusion table
+```{r warning=FALSE}
+library(cvms)
+conf_mat <- confusion_matrix(targets = log_fourlevel_user$targetLevel,
+                             predictions = log_fourlevel_user$pressedLevel)
+
+conf_mat
+
+fourlevel_confusion <- plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
+  add_normalized = FALSE,
+  add_row_percentages = FALSE,
+  class_order = c("full", "mediumHigh", "mediumLow", "light"))
+
+fourlevel_confusion
+
+fourlevel_confusion + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_blank() ,
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank()
+    )
+
+ggsave("4level_confusion.pdf", width = 4, height = 4)
+
+conf_mat <- confusion_matrix(targets = log_fourlevel_user$targetLevel,
+                             predictions = log_fourlevel_user$pressLevel_user)
+
+conf_mat
+
+plot_confusion_matrix(conf_mat$`Confusion Matrix`[[1]],
+  add_normalized = FALSE,
+  add_row_percentages = FALSE,
+  class_order = c("full", "mediumHigh", "mediumLow", "light"))
+
+
+```
+
+#### Each user
+```{r warning=FALSE}
+
+
+fourlovel_each_user_press <- ggplot(log_fourlevel_user,
+  aes(
+    x = reorder(id, desc(id)),
+    y = pressRawPercent,
+    color = targetLevel,
+  )
+) + 
+  scale_y_continuous(lim=c(0,100), breaks = seq(0, 100, by = 20) )  +
+  scale_colour_manual(values = level_cols) + 
+  geom_hline(yintercept=5, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=35, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=70, linetype="dashed", color = "#5D6D7E") + 
+  geom_hline(yintercept=98, linetype="dashed", color = "#5D6D7E")+ 
+  geom_boxplot(outliers = FALSE, fill=NA, position=position_identity(), alpha = 0.7, width = 0.6) + 
+  coord_flip()
+  
+
+fourlovel_each_user_press
+
+fourlovel_each_user_press + theme( # remove the vertical grid lines
+          panel.background = element_blank(),
+          panel.grid.major.y = element_blank() ,
+          # explicitly set the horizontal lines (or they will disappear too)
+          panel.grid.major.x = element_line( size=.1, color="gray" ),
+          axis.title.x = element_blank(),
+          axis.text.x=element_blank(),
+          axis.ticks.x = element_blank(),
+          axis.title.y = element_blank(),
+          axis.text.y=element_blank(),
+          axis.ticks.y = element_blank(),
+          legend.position="none",
+    )
+
+ggsave("4level_user.pdf", width = 4, height = 12)
+
+```
+
+
+
+### Accuracy levelcount - user
+```{r warning=FALSE}
+
+log_fourlevel_user_accuracy <- log_fourlevel_user %>%
+  dplyr::select(id:isSuccessful, pressLevel_user, isSuccessful_user)
+
+log_threelevel_user_accuracy <- log_threelevel_user %>%
+  dplyr::select(id:isSuccessful, pressLevel_user, isSuccessful_user)
+
+log_twolevel_user_accuracy <- log_twolevel_user %>%
+  dplyr::select(id:isSuccessful, pressLevel_user, isSuccessful_user)
+
+log_user = bind_rows(log_twolevel_user_accuracy,log_threelevel_user_accuracy, log_fourlevel_user_accuracy)
+
+log_defult_accuracy <- log_user %>%
+  group_by(id, levelCounts) %>%
+  summarize(
+    accuracy_ave = sum(isSuccessful) / n(),
+    n_trials = n()
+  ) %>%
+  mutate(
+    method = "default"
+  ) %>%
+  ungroup() %>%
+  arrange(id, levelCounts)
+  
+log_user_accuracy <- log_user %>%
+  group_by(id, levelCounts) %>%
+  summarize(
+    accuracy_ave = sum(isSuccessful_user) / n(),
+    n_trials = n()
+  ) %>%
+  mutate(
+    method = "user"
+  ) %>%
+  ungroup() %>%
+  arrange(id, levelCounts)
+  
+log_accuracy = bind_rows(log_defult_accuracy, log_user_accuracy)
+
+
+log_accuracy_summary <- log_accuracy  %>%
+  group_by(levelCounts, method) %>%
+  summarize(
+    meanAccuracy = accuracy_ave %>% mean(na.rm=TRUE),
+    lowCIAccuracy = ci(accuracy_ave)[2] %>% pmax(0),
+    highCIAccuracy = ci(accuracy_ave)[3] %>% pmin(1),
+    sdAccuracy = ci(accuracy_ave)[4],
+    stdAccuracy = sd(accuracy_ave)) %>%
+  ungroup() %>%
+  arrange(method, levelCounts)
+
+log_accuracy_summary
+
+pd <- position_dodge(width = 0.3)
+log_accuracy_summary %>% ggplot(
+  aes(
+    x = levelCounts,
+    y = meanAccuracy,
+    ymin = lowCIAccuracy,
+    ymax = highCIAccuracy,
+    color = method
+  )
+) +
+  geom_pointrange(position = pd) 
+```

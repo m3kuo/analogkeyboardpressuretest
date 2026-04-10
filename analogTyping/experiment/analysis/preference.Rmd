@@ -18,6 +18,21 @@ library(ez)
 library(ARTool)
 library(emmeans)
 ```
+### functions
+
+```{r warning=FALSE}
+percent <- function(num, digits = 2, ...) {      
+  percentage <-formatC(num * 100, format = "f", digits = digits, ...)
+  
+  # appending "%" symbol at the end of
+  # calculate percentage value
+  paste0(percentage, "%")
+}
+
+INT <- function(x){
+    qnorm((rank(x) - 0.5)/length(x))
+}
+```
 
 ### Import data
 
@@ -203,14 +218,20 @@ qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 library(coin)
 log_MD$ID = factor(log_MD$ID)
 friedman_test(Score ~ levelCount | ID, data=log_MD, distribution="asymptotic")
+friedman_effsize(Score ~ levelCount | ID, data=log_MD)
 
+# 
+# library(reshape2) # for dcast
+# df2 <- dcast(log_MD, ID ~ levelCount, value.var="Score") # make wide-format table
+# ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+# ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+# bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+# p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
 
-library(reshape2) # for dcast
-df2 <- dcast(log_MD, ID ~ levelCount, value.var="Score") # make wide-format table
-ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
-ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
-bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
-p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+pairwise.wilcox.test(x = log_MD$Score,
+                     g = log_MD$levelCount,
+                     p.adjust.method = "holm",
+                     paired = TRUE)
 ```
 
 Main effect on levelCounts: 2 is less mental demand than 3 and 4, 3 is less mental demand than 4
@@ -273,12 +294,19 @@ library(coin)
 log_PD$ID = factor(log_PD$ID)
 friedman_test(Score ~ levelCount | ID, data=log_PD, distribution="asymptotic")
 
-library(reshape2) # for dcast
-df2 <- dcast(log_PD, ID ~ levelCount, value.var="Score") # make wide-format table
-ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
-ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
-bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
-p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+friedman_effsize(Score ~ levelCount | ID, data=log_PD)
+
+# library(reshape2) # for dcast
+# df2 <- dcast(log_PD, ID ~ levelCount, value.var="Score") # make wide-format table
+# ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+# ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+# bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+# p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+
+pairwise.wilcox.test(x = log_PD$Score,
+                     g = log_PD$levelCount,
+                     p.adjust.method = "holm",
+                     paired = TRUE)
 ```
 
 Main effect on levelCounts: 2 is less physical demand than 3 and 4, 3 is less physical demand than 4
@@ -343,13 +371,19 @@ qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 library(coin)
 log_TD$ID = factor(log_TD$ID)
 friedman_test(Score ~ levelCount | ID, data=log_TD, distribution="asymptotic")
+friedman_effsize(Score ~ levelCount | ID, data=log_TD)
 
-library(reshape2) # for dcast
-df2 <- dcast(log_TD, ID ~ levelCount, value.var="Score") # make wide-format table
-ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
-ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
-bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
-p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+# library(reshape2) # for dcast
+# df2 <- dcast(log_TD, ID ~ levelCount, value.var="Score") # make wide-format table
+# ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+# ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+# bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+# p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+
+pairwise.wilcox.test(x = log_PD$Score,
+                     g = log_PD$levelCount,
+                     p.adjust.method = "holm",
+                     paired = TRUE)
 
 ```
 
@@ -416,13 +450,19 @@ qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 library(coin)
 log_P$ID = factor(log_P$ID)
 friedman_test(Score ~ levelCount | ID, data=log_P, distribution="asymptotic")
+friedman_effsize(Score ~ levelCount | ID, data=log_P)
 
-library(reshape2) # for dcast
-df2 <- dcast(log_P, ID ~ levelCount, value.var="Score") # make wide-format table
-ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
-ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
-bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
-p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+# library(reshape2) # for dcast
+# df2 <- dcast(log_P, ID ~ levelCount, value.var="Score") # make wide-format table
+# ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+# ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+# bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+# p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+
+pairwise.wilcox.test(x = log_P$Score,
+                     g = log_P$levelCount,
+                     p.adjust.method = "holm",
+                     paired = TRUE)
 
 ```
 
@@ -490,14 +530,20 @@ qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 library(coin)
 log_E$ID = factor(log_E$ID)
 friedman_test(Score ~ levelCount | ID, data=log_E, distribution="asymptotic")
+friedman_effsize(Score ~ levelCount | ID, data=log_E)
 
 
-library(reshape2) # for dcast
-df2 <- dcast(log_E, ID ~ levelCount, value.var="Score") # make wide-format table
-ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
-ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
-bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
-p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+# library(reshape2) # for dcast
+# df2 <- dcast(log_E, ID ~ levelCount, value.var="Score") # make wide-format table
+# ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+# ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+# bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+# p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+
+pairwise.wilcox.test(x = log_E$Score,
+                     g = log_E$levelCount,
+                     p.adjust.method = "holm",
+                     paired = TRUE)
 
 ```
 
@@ -564,13 +610,19 @@ qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 library(coin)
 log_F$ID = factor(log_F$ID)
 friedman_test(Score ~ levelCount | ID, data=log_F, distribution="asymptotic")
+friedman_effsize(Score ~ levelCount | ID, data=log_F)
 
-library(reshape2) # for dcast
-df2 <- dcast(log_F, ID ~ levelCount, value.var="Score") # make wide-format table
-ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
-ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
-bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
-p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+# library(reshape2) # for dcast
+# df2 <- dcast(log_F, ID ~ levelCount, value.var="Score") # make wide-format table
+# ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+# ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+# bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+# p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+
+pairwise.wilcox.test(x = log_F$Score,
+                     g = log_F$levelCount,
+                     p.adjust.method = "holm",
+                     paired = TRUE)
 
 ```
 
@@ -639,14 +691,14 @@ qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 library(coin)
 log_L$ID = factor(log_L$ID)
 friedman_test(Score ~ levelCount | ID, data=log_L, distribution="asymptotic")
-
-
-library(reshape2) # for dcast
-df2 <- dcast(log_L, ID ~ levelCount, value.var="Score") # make wide-format table
-ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
-ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
-bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
-p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
+friedman_effsize(Score ~ levelCount | ID, data=log_F)
+# 
+# library(reshape2) # for dcast
+# df2 <- dcast(log_L, ID ~ levelCount, value.var="Score") # make wide-format table
+# ab = wilcox.test(df2$"2", df2$"3", paired=TRUE) # a vs. b
+# ac = wilcox.test(df2$"2", df2$"4", paired=TRUE) # a vs. c
+# bc = wilcox.test(df2$"3", df2$"4", paired=TRUE) # b vs. c
+# p.adjust(c(ab$p.value, ac$p.value, bc$p.value), method="holm")
 
 pairwise.wilcox.test(x = log_L$Score, 
                      g = log_L$levelCount, 
@@ -725,7 +777,7 @@ level2_data_level_graph + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("2level_easiness_levels.pdf", width = 3, height = 2)
+ggsave("2level_easiness_level.pdf", width = 3, height = 2)
 
 
 level2_data_key_long$ID = factor(level2_data_key_long$ID)
@@ -767,7 +819,7 @@ level2_data_key_graph + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("2level_easiness_keys.pdf", width = 3, height = 8)
+ggsave("2level_easiness_key.pdf", width = 3, height = 8)
 
 
 ```
@@ -782,6 +834,7 @@ qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 library(coin)
 level2_data_level_long$ID = factor(level2_data_level_long$ID)
 friedman_test(Score ~ Level | ID, data=level2_data_level_long, distribution="asymptotic")
+friedman_effsize(Score ~ Level | ID, data=level2_data_level_long)
 
 pairwise.wilcox.test(x = level2_data_level_long$Score, 
                      g = level2_data_level_long$Level, 
@@ -796,6 +849,7 @@ qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 library(coin)
 level2_data_key_long$ID = factor(level2_data_key_long$ID)
 friedman_test(Score ~ Key | ID, data=level2_data_key_long, distribution="asymptotic")
+friedman_effsize(Score ~ Key | ID, data=level2_data_key_long)
 
 pairwise.wilcox.test(x = level2_data_key_long$Score, 
                      g = level2_data_key_long$Key, 
@@ -874,7 +928,7 @@ level3_data_level_graph + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("3level_easiness_levels.pdf", width = 3, height = 3)
+ggsave("3level_easiness_level.pdf", width = 3, height = 3)
 
 
 level3_data_key_long$ID = factor(level3_data_key_long$ID)
@@ -916,7 +970,7 @@ level3_data_key_graph + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("3level_easiness_keys.pdf", width = 3, height = 8)
+ggsave("3level_easiness_key.pdf", width = 3, height = 8)
 
 
 ```
@@ -931,6 +985,7 @@ qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 library(coin)
 level3_data_level_long$ID = factor(level3_data_level_long$ID)
 friedman_test(Score ~ Level | ID, data=level3_data_level_long, distribution="asymptotic")
+friedman_effsize(Score ~ Level | ID, data=level3_data_level_long)
 
 pairwise.wilcox.test(x = level3_data_level_long$Score, 
                      g = level3_data_level_long$Level, 
@@ -945,6 +1000,7 @@ qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 library(coin)
 level3_data_key_long$ID = factor(level3_data_key_long$ID)
 friedman_test(Score ~ Key | ID, data=level3_data_key_long, distribution="asymptotic")
+friedman_effsize(Score ~ Key | ID, data=level3_data_key_long)
 
 pairwise.wilcox.test(x = level3_data_key_long$Score, 
                      g = level3_data_key_long$Key, 
@@ -1024,7 +1080,7 @@ level4_data_level_graph + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("4level_easiness_levels.pdf", width = 3, height = 4)
+ggsave("4level_easiness_level.pdf", width = 3, height = 4)
 
 
 level4_data_key_long$ID = factor(level4_data_key_long$ID)
@@ -1066,7 +1122,7 @@ level4_data_key_graph + theme( # remove the vertical grid lines
           axis.ticks.y = element_blank()
     )
 
-ggsave("4level_easiness_keys.pdf", width = 3, height = 8)
+ggsave("4level_easiness_key.pdf", width = 3, height = 8)
 
 
 ```
@@ -1081,6 +1137,7 @@ qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 library(coin)
 level4_data_level_long$ID = factor(level4_data_level_long$ID)
 friedman_test(Score ~ Level | ID, data=level4_data_level_long, distribution="asymptotic")
+friedman_effsize(Score ~ Level | ID, data=level4_data_level_long)
 
 pairwise.wilcox.test(x = level4_data_level_long$Score, 
                      g = level4_data_level_long$Level, 
@@ -1095,6 +1152,7 @@ qqnorm(residuals(m)); qqline(residuals(m)) # Q-Q plot
 library(coin)
 level4_data_key_long$ID = factor(level4_data_key_long$ID)
 friedman_test(Score ~ Key | ID, data=level4_data_key_long, distribution="asymptotic")
+friedman_effsize(Score ~ Key | ID, data=level4_data_key_long)
 
 pairwise.wilcox.test(x = level4_data_key_long$Score, 
                      g = level4_data_key_long$Key, 

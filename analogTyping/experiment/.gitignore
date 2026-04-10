@@ -2,5 +2,7 @@
 *.mp4
 *.pptx
 /analysis/.Rhistory
+/analysis/*.pdf
 /trials
 /logs
+/paperFigure
